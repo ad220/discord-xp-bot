@@ -1,16 +1,29 @@
 # This example requires the 'message_content' intent.
 
 import discord
+import os
+import data
 
-class MyClient(discord.Client):
-    async def on_ready(self):
-        print(f'Logged on as {self.user}!')
-
-    async def on_message(self, message):
-        print(f'Message from {message.author}: {message.content}')
+token = os.environ['DISCORD_TOKEN']
 
 intents = discord.Intents.default()
 intents.message_content = True
 
-client = MyClient(intents=intents)
-client.run('my token goes here')
+client = discord.Client(intents=intents)
+db = data.Database()
+
+@client.event
+async def on_ready():
+    print(f'We have logged in as {client.user}')
+
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+
+    if message.content.startswith('$hello'):
+        await message.channel.send('Hello!')
+
+client.run(token)
+
+
