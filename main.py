@@ -12,14 +12,23 @@ token = os.environ.get('DISCORD_TOKEN')
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 
 bot = discord.Bot(intents=intents)
 db = data.Database()
+
+
+
+
+# ================================
+# Events
+# ================================
 
 @bot.event
 async def on_ready():
     db.create_tables()
     print(f'We have logged in as {bot.user}')
+    await bot.change_presence(status=discord.Status.invisible)
 
 @bot.event
 async def on_guild_join(guild):
@@ -32,65 +41,100 @@ async def on_guild_remove(guild):
     db.rm_server(int(guild.id))
 
 
+
+# ================================
+# Commands
+# ================================
+
+async def is_mod(ctx):
+    mod_role = db.get_server_config(ctx.guild.id)['mod_role']
+    if mod_role in [role.id for role in ctx.author.roles]:
+        return True
+    await ctx.respond(f"You must be <@&{mod_role}> to use this command")
+    return False
+
+
 xpbot = bot.create_group('xpbot', "Manage XP Bot", guild_ids=[GUILD_ID])
 
+# User commands
 @xpbot.command(guild_ids=[GUILD_ID])
-async def test(ctx: commands.Context):
-    if ctx.author.guild_permissions.administrator:
-        await ctx.respond('Test command')
-    else:
-        await ctx.respond('You do not have permission to use this command')
-
-@xpbot.command(guild_ids=[GUILD_ID])
-async def get_leaderboard(ctx: commands.Context):
+async def leaderboard(ctx: commands.Context):
     users = db.get_leaderboard(ctx.guild.id)
     await ctx.respond(users)
+
+@xpbot.command(guild_ids=[GUILD_ID])
+async def stats(ctx: commands.Context):
+    stats = db.get_stats(ctx.guild.id, ctx.author.id)
+    await ctx.respond(stats)
+
+
+# Mod commands
+@xpbot.command(guild_ids=[GUILD_ID])
+async def set_xp(ctx: commands.Context, member: discord.Member, xp: int):
+    if await is_mod(ctx):
+        db.set_user_xp(ctx.guild.id, member.id, xp)
+        await ctx.respond('Done')
+
+@xpbot.command(guild_ids=[GUILD_ID])
+async def set_channels(ctx: commands.Context):
+    if await is_mod(ctx):
+        await ctx.respond('Select the channels you want to track', view=ChannelView())
+
+class ChannelView(discord.ui.View):
+    @discord.ui.select(
+        select_type=discord.ComponentType.channel_select,
+        max_values=25,
+        min_values=1,
+        channel_types=[discord.ChannelType.text, discord.ChannelType.voice]
+    )
+    async def select_callback(self, select, interaction):
+        db.edit_channels(interaction.guild.id, [(channel.id, channel.type.value) for channel in select.options])
+        await interaction.response.send_message('Done', ephemeral=True)
+
+# Admin commands
+@xpbot.command(guild_ids=[GUILD_ID])
+async def set_mod_role(ctx: commands.Context, role: discord.Role):
+    if ctx.author.guild_permissions.administrator:
+        db.set_mod_role(ctx.guild.id, role.id)
+        await ctx.respond('Done')
+    else:
+        await ctx.respond('You must be an administrator to use this command')
 
 
 role = xpbot.create_subgroup('role', "Manage automatic roles", guild_ids=[GUILD_ID])
 
 @role.command(guild_ids=[GUILD_ID])
 async def add(ctx: commands.Context, role: discord.Role, xp_threshold: int):
-    if ctx.author.guild_permissions.administrator:
+    if await is_mod(ctx):
         db.set_role(ctx.guild.id, role.id, xp_threshold)
         await ctx.respond('Done')
-    else:
-        await ctx.respond('You do not have permission to use this command')
 
 @role.command(guild_ids=[GUILD_ID])
 async def rm(ctx: commands.Context, role: discord.Role):
-    if ctx.author.guild_permissions.administrator:
+    if await is_mod(ctx):
         db.rm_role(role.id)
         await ctx.respond('Done')
-    else:
-        await ctx.respond('You do not have permission to use this command')
 
 @role.command(guild_ids=[GUILD_ID])
 async def show(ctx: commands.Context):
-    if ctx.author.guild_permissions.administrator:
+    if await is_mod(ctx):
         roles = db.get_server_config(ctx.guild.id)['roles']
         await ctx.respond(roles)
-    else:
-        await ctx.respond('You do not have permission to use this command')
 
 
 xprate = xpbot.create_subgroup('set_xp_rate', "Manage XP rate", guild_ids=[GUILD_ID])
 
 @xprate.command(guild_ids=[GUILD_ID])
 async def voice(ctx: commands.Context, xp_rate: int):
-    if ctx.author.guild_permissions.administrator:
+    if await is_mod(ctx):
         db.set_xp_rate_voice(ctx.guild.id, xp_rate)
         await ctx.respond('Done')
-    else:
-        await ctx.respond('You do not have permission to use this command')
 
 @xprate.command(guild_ids=[GUILD_ID])
 async def text(ctx: commands.Context, xp_rate: int):
-    if ctx.author.guild_permissions.administrator:
+    if await is_mod(ctx):
         db.set_xp_rate_text(ctx.guild.id, xp_rate)
         await ctx.respond('Done')
-    else:
-        await ctx.respond('You do not have permission to use this command')
 
 
 bot.run(token)

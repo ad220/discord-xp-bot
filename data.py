@@ -1,4 +1,5 @@
 import sqlite3
+from discord.enums import ChannelType
 
 DB_PATH = 'data/data.db'
 
@@ -13,10 +14,10 @@ class Database:
 
 
     def create_tables(self) -> None: 
-        self.cur.execute('CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY, name TEXT, xprate_msg INTEGER DEFAULT 1, xprate_voice INTEGER DEFAULT 1)')
+        self.cur.execute('CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY, name TEXT, xprate_msg INTEGER DEFAULT 1, xprate_voice INTEGER DEFAULT 1, mod_role INTEGER DEFAULT 0)')
         self.cur.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, discord_id INTEGER, server_id INTEGER, xp INTEGER DEFAULT 0, msg_count INTEGER DEFAULT 0, voice_uptime INTEGER DEFAULT 0)') 
         self.cur.execute('CREATE TABLE IF NOT EXISTS roles (id INTEGER PRIMARY KEY, xp_threshold INTEGER, server_id INTEGER)')
-        self.cur.execute('CREATE TABLE IF NOT EXISTS channels (id INTEGER PRIMARY KEY, type TEXT, server_id INTEGER)')
+        self.cur.execute('CREATE TABLE IF NOT EXISTS channels (id INTEGER PRIMARY KEY, type INTEGER, server_id INTEGER)')
         self.con.commit()
 
 
@@ -64,7 +65,7 @@ class Database:
         self.con.commit()
 
 
-    def edit_channels(self, server_id: int, channels: list[tuple[int, str]]) -> None:
+    def edit_channels(self, server_id: int, channels: list[tuple[int, int]]) -> None:
         self.cur.execute('DELETE FROM channels WHERE server_id = ?', (server_id,))
         self.cur.executemany('INSERT INTO channels VALUES (?, ?, ?)', [(channel_id, channel_type, server_id) for (channel_id, channel_type) in channels])
         self.con.commit()
@@ -72,21 +73,23 @@ class Database:
 
     def get_server_config(self, server_id: int) -> dict:
         self.cur.execute('SELECT * FROM servers WHERE id = ?', (server_id,))
-        id, name, rate_txt, rate_voice = self.cur.fetchone()
+        id, name, rate_txt, rate_voice, mod_role = self.cur.fetchone()
         server_config = {   
             'id': id,
             'name': name,
             'rate_txt': rate_txt,
-            'rate_voice': rate_voice
+            'rate_voice': rate_voice,
+            'mod_role': mod_role,
         }
 
         self.cur.execute('SELECT id, xp_threshold FROM roles WHERE server_id = ?', (server_id,))
         server_config['roles'] = self.cur.fetchall()
 
-        self.cur.execute('SELECT id FROM channels WHERE server_id = ? AND type = ?', (server_id, "text"))
+        server_config['channels'] = {}
+        self.cur.execute('SELECT id FROM channels WHERE server_id = ? AND type = ?', (server_id, ChannelType.text.value))
         server_config['channels']['text'] = self.cur.fetchall()
 
-        self.cur.execute('SELECT id FROM channels WHERE server_id = ? AND type = ?', (server_id, "voice"))
+        self.cur.execute('SELECT id FROM channels WHERE server_id = ? AND type = ?', (server_id, ChannelType.voice.value))
         server_config['channels']['voice'] = self.cur.fetchall()
 
         return server_config
@@ -99,6 +102,10 @@ class Database:
     
     def set_xp_rate_voice(self, server_id: int, xp_rate: int) -> None:
         self.cur.execute('UPDATE servers SET xprate_voice = ? WHERE id = ?', (xp_rate, server_id))
+        self.con.commit()
+
+    def set_mod_role(self, server_id: int, role_id: int) -> None:
+        self.cur.execute('UPDATE servers SET mod_role = ? WHERE id = ?', (role_id, server_id))
         self.con.commit()
 
 
