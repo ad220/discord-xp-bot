@@ -117,12 +117,32 @@ xpbot = bot.create_group('xpbot', "Manage XP Bot", guild_ids=[GUILD_ID])
 @xpbot.command(guild_ids=[GUILD_ID])
 async def leaderboard(ctx: commands.Context):
     users = db.get_leaderboard(ctx.guild.id)
-    await ctx.respond(users)
+    embed = discord.Embed(
+        title="Leaderboard",
+        color=0x82c778,
+    )
+    user_column, xp_column = [], []
+    for i, user in enumerate(users):
+        username, xp = user
+        user_column.append(f"`{i+1}.` {username}")
+        xp_column.append(f"`{xp}`")
+
+    embed.add_field(name="Top 10", value="\n".join(user_column), inline=True)
+    embed.add_field(name="XP", value="\n".join(xp_column), inline=True)
+    await ctx.respond(embed=embed)
 
 @xpbot.command(guild_ids=[GUILD_ID])
 async def stats(ctx: commands.Context):
     stats = db.get_stats(ctx.guild.id, ctx.author.id)
-    await ctx.respond(stats)
+    username, xp, msg_count, voice_uptime = stats
+    embed = discord.Embed(
+        title=f"{username}'s stats",
+        color=0x82c778,
+    )
+    embed.add_field(name="XP", value=f"{xp} XP")
+    embed.add_field(name="Texts", value=f"{msg_count} msg")
+    embed.add_field(name="Vocal", value=f"{voice_uptime//60}h{voice_uptime%60:02d}")
+    await ctx.respond(embed=embed)
 
 
 # Mod commands
