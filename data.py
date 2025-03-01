@@ -1,6 +1,8 @@
 import sqlite3
 from discord.enums import ChannelType
 
+import cache
+
 DB_PATH = 'data/data.db'
 
 class Database:
@@ -33,19 +35,23 @@ class Database:
         self.cur.execute('DELETE FROM channels WHERE server_id = ?', (server_id,))
         self.con.commit()
 
+    def get_servers(self) -> list[int]:
+        self.cur.execute('SELECT id FROM servers')
+        return [server_id for (server_id,) in self.cur.fetchall()]
+
 
     def init_users(self, server_id: int, users: list[tuple[str, int]]) -> None:
         self.cur.executemany('INSERT INTO users(username, discord_id, server_id) VALUES (?, ?, ?)', [(username, discord_id, server_id) for (username, discord_id) in users])
         self.con.commit()
 
 
-    def add_user(self, server_id: int, username: str, discord_id: int) -> None:
-        self.cur.execute('INSERT INTO users(username, discord_id, server_id) VALUES (?, ?, ?)', (username, discord_id, server_id))
+    def add_user(self, server_id: int, user_id: int, username: str, ) -> None:
+        self.cur.execute('INSERT INTO users(username, discord_id, server_id) VALUES (?, ?, ?)', (username, user_id, server_id))
         self.con.commit()
 
 
-    def rm_user(self, server_id: int, discord_id: int) -> None:
-        self.cur.execute('DELETE FROM users WHERE server_id = ? AND discord_id = ?', (server_id, discord_id))
+    def rm_user(self, server_id: int, user_id: int) -> None:
+        self.cur.execute('DELETE FROM users WHERE server_id = ? AND discord_id = ?', (server_id, user_id))
         self.con.commit()
 
 
@@ -71,28 +77,21 @@ class Database:
         self.con.commit()
 
 
-    def get_server_config(self, server_id: int) -> dict:
+    def get_server_config(self, server_id: int) -> cache.ServerConfig:
         self.cur.execute('SELECT * FROM servers WHERE id = ?', (server_id,))
-        id, name, rate_txt, rate_voice, mod_role = self.cur.fetchone()
-        server_config = {   
-            'id': id,
-            'name': name,
-            'rate_txt': rate_txt,
-            'rate_voice': rate_voice,
-            'mod_role': mod_role,
-        }
+        guild_id, name, rate_txt, rate_voice, mod_role = self.cur.fetchone()
 
         self.cur.execute('SELECT id, xp_threshold FROM roles WHERE server_id = ?', (server_id,))
-        server_config['roles'] = self.cur.fetchall()
+        roles = self.cur.fetchall()
 
-        server_config['channels'] = {}
+        channels = {}
         self.cur.execute('SELECT id FROM channels WHERE server_id = ? AND type = ?', (server_id, ChannelType.text.value))
-        server_config['channels']['text'] = self.cur.fetchall()
+        channels['text'] = [channel[0] for channel in self.cur.fetchall()]
 
         self.cur.execute('SELECT id FROM channels WHERE server_id = ? AND type = ?', (server_id, ChannelType.voice.value))
-        server_config['channels']['voice'] = self.cur.fetchall()
+        channels['voice'] = [channel[0] for channel in self.cur.fetchall()]
 
-        return server_config
+        return cache.ServerConfig(guild_id,name, rate_txt, rate_voice, mod_role, roles, channels)
     
 
     def set_xp_rate_text(self, server_id: int, xp_rate: int) -> int:
@@ -109,13 +108,45 @@ class Database:
         self.con.commit()
 
 
-    def get_user_xp(self, server_id: int, discord_id: int) -> int:
-        self.cur.execute('SELECT xp FROM users WHERE server_id = ? AND discord_id = ?', (server_id, discord_id))
+    def get_user_xp(self, server_id: int, user_id: int) -> int:
+        self.cur.execute('SELECT xp FROM users WHERE server_id = ? AND discord_id = ?', (server_id, user_id))
+        return self.cur.fetchone()[0]
+
+    def set_user_xp(self, server_id: int, user_id: int, xp: int) -> None:
+        self.cur.execute('UPDATE users SET xp = ? WHERE server_id = ? AND discord_id = ?', (xp, server_id, user_id))
+        self.con.commit()
+    
+    def add_user_xp(self, server_id: int, user_id: int, xp: int) -> int:
+        self.cur.execute('UPDATE users SET xp = xp + ? WHERE server_id = ? AND discord_id = ?', (xp, server_id, user_id))
+        self.con.commit()
+        self.cur.execute('SELECT xp FROM users WHERE server_id = ? AND discord_id = ?', (server_id, user_id))
         return self.cur.fetchone()[0]
 
 
-    def set_user_xp(self, server_id: int, discord_id: int, xp: int) -> None:
-        self.cur.execute('UPDATE users SET xp = ? WHERE server_id = ? AND discord_id = ?', (xp, server_id, discord_id))
+
+    def get_user_msg_count(self, server_id: int, user_id: int) -> int:
+        self.cur.execute('SELECT msg_count FROM users WHERE server_id = ? AND discord_id = ?', (server_id, user_id))
+        return self.cur.fetchone()[0]
+    
+    def set_user_msg_count(self, server_id: int, user_id: int, msg_count: int) -> None:
+        self.cur.execute('UPDATE users SET msg_count = ? WHERE server_id = ? AND discord_id = ?', (msg_count, server_id, user_id))
+        self.con.commit()
+
+    def add_user_msg_count(self, server_id: int, user_id: int, n_msg: int = 1) -> None:
+        self.cur.execute('UPDATE users SET msg_count = msg_count + ? WHERE server_id = ? AND discord_id = ?', (n_msg, server_id, user_id))
+        self.con.commit()
+
+
+    def get_user_voice_uptime(self, server_id: int, user_id: int) -> int:
+        self.cur.execute('SELECT voice_uptime FROM users WHERE server_id = ? AND discord_id = ?', (server_id, user_id))
+        return self.cur.fetchone()[0]
+    
+    def set_user_voice_uptime(self, server_id: int, user_id: int, voice_uptime: int) -> None:
+        self.cur.execute('UPDATE users SET voice_uptime = ? WHERE server_id = ? AND discord_id = ?', (voice_uptime, server_id, user_id))
+        self.con.commit()
+    
+    def add_user_voice_uptime(self, server_id: int, user_id: int, n_min: int) -> None:
+        self.cur.execute('UPDATE users SET voice_uptime = voice_uptime + ? WHERE server_id = ? AND discord_id = ?', (n_min, server_id, user_id))
         self.con.commit()
 
 
@@ -124,6 +155,6 @@ class Database:
         return self.cur.fetchmany(10)
 
 
-    def get_stats(self, server_id, discord_id: int) -> tuple[str, int, int]:
-        self.cur.execute('SELECT username, msg_count, voice_uptime FROM users WHERE server_id = ? AND discord_id = ?', (server_id, discord_id))
+    def get_stats(self, server_id, user_id: int) -> tuple[str, int, int]:
+        self.cur.execute('SELECT username, xp, msg_count, voice_uptime FROM users WHERE server_id = ? AND discord_id = ?', (server_id, user_id))
         return self.cur.fetchone()
