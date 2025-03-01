@@ -170,17 +170,7 @@ class ChannelView(discord.ui.View):
         db.edit_channels(interaction.guild.id, [(channel.id, channel.type.value) for channel in select.values])
         cached.update_server_config(db.get_server_config(interaction.guild.id))
         await interaction.response.send_message('Done', ephemeral=True)
-
-# Admin commands
-@xpbot.command(guild_ids=[GUILD_ID])
-async def set_mod_role(ctx: commands.Context, role: discord.Role):
-    if ctx.author.guild_permissions.administrator:
-        db.set_mod_role(ctx.guild.id, role.id)
-        cached.update_server_config(db.get_server_config(ctx.guild.id))
-        await ctx.respond('Done')
-    else:
-        await ctx.respond('You must be an administrator to use this command')
-
+        
 
 role = xpbot.create_subgroup('role', "Manage automatic roles", guild_ids=[GUILD_ID])
 
@@ -222,6 +212,16 @@ async def text(ctx: commands.Context, xp_rate: int):
         await ctx.respond('Done')
 
 
-bot.run(token)
+# Admin commands
+@xpbot.command(guild_ids=[GUILD_ID])
+async def set_mod_role(ctx: commands.Context, role: discord.Role):
+    if ctx.author.guild_permissions.administrator:
+        db.set_mod_role(ctx.guild.id, role.id)
+        cached.update_server_config(db.get_server_config(ctx.guild.id))
+        await ctx.respond('Done')
+    else:
+        await ctx.respond('You must be an administrator to use this command')
 
 
+if __name__ == '__main__':
+    bot.run(token)
