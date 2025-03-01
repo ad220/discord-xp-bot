@@ -1,0 +1,11 @@
+[Unit]
+Description=Discord XP Bot Service
+
+[Service]
+User=ad220
+WorkingDirectory=/home/ad220/code/discord-xp-bot
+ExecStart=/bin/bash -c 'source .venv/bin/activate && python main.py'
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
