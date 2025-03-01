@@ -7,8 +7,6 @@ import data
 import cache
 from cache import ServerConfig
 
-GUILD_ID = 1334451132864659500
-
 load_dotenv()
 token = os.environ.get('DISCORD_TOKEN')
 
@@ -111,10 +109,10 @@ async def on_voice_state_update(member: discord.Member,
 # Commands
 # ================================
 
-xpbot = bot.create_group('xpbot', "Manage XP Bot", guild_ids=[GUILD_ID])
+xpbot = bot.create_group('xpbot', "Manage XP Bot")
 
 # User commands
-@xpbot.command(guild_ids=[GUILD_ID])
+@xpbot.command()
 async def leaderboard(ctx: commands.Context):
     users = db.get_leaderboard(ctx.guild.id)
     embed = discord.Embed(
@@ -131,7 +129,7 @@ async def leaderboard(ctx: commands.Context):
     embed.add_field(name="XP", value="\n".join(xp_column), inline=True)
     await ctx.respond(embed=embed)
 
-@xpbot.command(guild_ids=[GUILD_ID])
+@xpbot.command()
 async def stats(ctx: commands.Context):
     stats = db.get_stats(ctx.guild.id, ctx.author.id)
     username, xp, msg_count, voice_uptime = stats
@@ -146,7 +144,7 @@ async def stats(ctx: commands.Context):
 
 
 # Mod commands
-@xpbot.command(guild_ids=[GUILD_ID])
+@xpbot.command()
 async def set_xp(ctx: commands.Context, member: discord.Member, xp: int):
     if await is_mod(ctx):
         db.set_user_xp(ctx.guild.id, member.id, xp)
@@ -154,7 +152,7 @@ async def set_xp(ctx: commands.Context, member: discord.Member, xp: int):
         cached.update_server_config(db.get_server_config(ctx.guild.id))
         await ctx.respond('Done')
 
-@xpbot.command(guild_ids=[GUILD_ID])
+@xpbot.command()
 async def set_channels(ctx: commands.Context):
     if await is_mod(ctx):
         await ctx.respond('Select the channels you want to track', view=ChannelView())
@@ -172,39 +170,39 @@ class ChannelView(discord.ui.View):
         await interaction.response.send_message('Done', ephemeral=True)
         
 
-role = xpbot.create_subgroup('role', "Manage automatic roles", guild_ids=[GUILD_ID])
+role = xpbot.create_subgroup('role', "Manage automatic roles")
 
-@role.command(guild_ids=[GUILD_ID])
+@role.command()
 async def add(ctx: commands.Context, role: discord.Role, xp_threshold: int):
     if await is_mod(ctx):
         db.set_role(ctx.guild.id, role.id, xp_threshold)
         cached.update_server_config(db.get_server_config(ctx.guild.id))
         await ctx.respond('Done')
 
-@role.command(guild_ids=[GUILD_ID])
+@role.command()
 async def rm(ctx: commands.Context, role: discord.Role):
     if await is_mod(ctx):
         db.rm_role(role.id)
         cached.update_server_config(db.get_server_config(ctx.guild.id))
         await ctx.respond('Done')
 
-@role.command(guild_ids=[GUILD_ID])
+@role.command()
 async def show(ctx: commands.Context):
     if await is_mod(ctx):
         roles = db.get_server_config(ctx.guild.id)['roles']
         await ctx.respond(roles)
 
 
-xprate = xpbot.create_subgroup('set_xp_rate', "Manage XP rate", guild_ids=[GUILD_ID])
+xprate = xpbot.create_subgroup('set_xp_rate', "Manage XP rate")
 
-@xprate.command(guild_ids=[GUILD_ID])
+@xprate.command()
 async def voice(ctx: commands.Context, xp_rate: int):
     if await is_mod(ctx):
         db.set_xp_rate_voice(ctx.guild.id, xp_rate)
         cached.update_server_config(db.get_server_config(ctx.guild.id))
         await ctx.respond('Done')
 
-@xprate.command(guild_ids=[GUILD_ID])
+@xprate.command()
 async def text(ctx: commands.Context, xp_rate: int):
     if await is_mod(ctx):
         db.set_xp_rate_text(ctx.guild.id, xp_rate)
@@ -213,7 +211,7 @@ async def text(ctx: commands.Context, xp_rate: int):
 
 
 # Admin commands
-@xpbot.command(guild_ids=[GUILD_ID])
+@xpbot.command()
 async def set_mod_role(ctx: commands.Context, role: discord.Role):
     if ctx.author.guild_permissions.administrator:
         db.set_mod_role(ctx.guild.id, role.id)
