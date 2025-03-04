@@ -65,4 +65,3 @@ class CachedData():
     
     def update_server_config(self, config: ServerConfig):
         self.data[config.id].update_config(config)
-    

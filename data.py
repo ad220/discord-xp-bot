@@ -81,7 +81,7 @@ class Database:
         self.cur.execute('SELECT * FROM servers WHERE id = ?', (server_id,))
         guild_id, name, rate_txt, rate_voice, mod_role = self.cur.fetchone()
 
-        self.cur.execute('SELECT id, xp_threshold FROM roles WHERE server_id = ?', (server_id,))
+        self.cur.execute('SELECT id, xp_threshold FROM roles WHERE server_id = ? ORDER BY xp_threshold ASC', (server_id,))
         roles = self.cur.fetchall()
 
         channels = {}

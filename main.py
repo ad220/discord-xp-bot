@@ -114,7 +114,7 @@ async def on_voice_state_update(member: discord.Member,
 xpbot = bot.create_group('xpbot', "Manage XP Bot")
 
 # User commands
-@xpbot.command()
+@xpbot.command(description="Shows the top 10 most active users of the server")
 async def leaderboard(ctx: commands.Context):
     users = db.get_leaderboard(ctx.guild.id)
     embed = discord.Embed(
@@ -131,7 +131,7 @@ async def leaderboard(ctx: commands.Context):
     embed.add_field(name="XP", value="\n".join(xp_column), inline=True)
     await ctx.respond(embed=embed)
 
-@xpbot.command()
+@xpbot.command(description="Shows your stats on this server")
 async def stats(ctx: commands.Context):
     stats = db.get_stats(ctx.guild.id, ctx.author.id)
     username, xp, msg_count, voice_uptime = stats
@@ -191,8 +191,22 @@ async def rm(ctx: commands.Context, role: discord.Role):
 @role.command()
 async def show(ctx: commands.Context):
     if await is_mod(ctx):
-        roles = db.get_server_config(ctx.guild.id)['roles']
-        await ctx.respond(roles)
+        roles = cached.get_server(ctx.guild.id).config.roles
+        role_column = []
+        xp_column = []
+        for n, (role_id, xp) in enumerate(roles):
+            # role = discord.utils.get(ctx.guild.roles, id=role_id)
+            role_column.append(f"`{n}.` <@&{role_id}>")
+            xp_column.append(f"`{xp}`")
+
+        embed = discord.Embed(
+            title="Roles",
+            color=0x82c778,
+        )
+        embed.add_field(name="Role", value="\n".join(role_column), inline=True)
+        embed.add_field(name="XP required", value="\n".join(xp_column), inline=True)
+
+        await ctx.respond(embed=embed)
 
 
 xprate = xpbot.create_subgroup('set_xp_rate', "Manage XP rate")
