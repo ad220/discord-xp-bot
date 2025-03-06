@@ -31,7 +31,7 @@ async def update_role(member: discord.Member, server_config: ServerConfig, xp: i
     for role_id, role_thr in server_config.roles:
         if role_id in member_roles:
             current_role = role_id
-        elif role_thr > max_thr and xp >= role_thr:
+        if role_thr > max_thr and xp >= role_thr:
             max_thr = role_thr
             new_role = role_id
     if new_role:
