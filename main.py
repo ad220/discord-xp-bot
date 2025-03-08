@@ -35,13 +35,33 @@ async def update_role(member: discord.Member, server_config: ServerConfig, xp: i
     else:
         await member.add_roles(discord.Object(server_config.roles[0][0]))
 
-
 async def is_mod(ctx: commands.Context):
     mod_role = cached.get_server(ctx.guild.id).config.mod_role
     if mod_role in [role.id for role in ctx.author.roles]:
         return True
     await ctx.respond(f"You must be <@&{mod_role}> to use this command")
     return False
+
+def add_channel_fields(embed: discord.Embed, server_config: ServerConfig):
+    text_channels = [f"<#{channel_id}>" for channel_id in server_config.channels['text']]
+    voice_channels = [f"<#{channel_id}>" for channel_id in server_config.channels['voice']]
+    embed.add_field(name="Text channels", value="\n".join(text_channels), inline=True)
+    embed.add_field(name="Voice channels", value="\n".join(voice_channels), inline=True)
+
+def add_role_fields(embed: discord.Embed, server_config: ServerConfig):
+    role_list = server_config.roles
+    role_column = []
+    xp_column = []
+    for n, (role_id, xp) in enumerate(role_list):
+        role_column.append(f"`{n}.` <@&{role_id}>")
+        xp_column.append(f"`{xp}`")
+
+    embed.add_field(name="Role", value="\n".join(role_column), inline=True)
+    embed.add_field(name="XP required", value="\n".join(xp_column), inline=True)
+
+def add_xprate_fields(embed: discord.Embed, server_config: ServerConfig):
+    embed.add_field(name="Text", value=f"`{server_config.rate_txt}` XP/msg", inline=True)
+    embed.add_field(name="Voice", value=f"`{server_config.rate_voice}` XP/min", inline=True)
 
 
 # ================================
@@ -83,7 +103,6 @@ async def on_message(message: discord.Message):
         db.add_user_msg_count(message.guild.id, message.author.id)
         await update_role(message.author, server_config, xp)
 
-
 @bot.event
 async def on_voice_state_update(member: discord.Member,
                                 before: discord.VoiceState,
@@ -107,10 +126,9 @@ async def on_voice_state_update(member: discord.Member,
 # Commands
 # ================================
 
-xpbot = bot.create_group('xpbot', "Manage XP Bot")
 
 # User commands
-@xpbot.command(description="Shows the top 10 most active users of the server")
+@bot.command(description="Shows the top 10 most active users of the server")
 async def leaderboard(ctx: commands.Context):
     users = db.get_leaderboard(ctx.guild.id)
     embed = discord.Embed(
@@ -127,7 +145,7 @@ async def leaderboard(ctx: commands.Context):
     embed.add_field(name="XP", value="\n".join(xp_column), inline=True)
     await ctx.respond(embed=embed)
 
-@xpbot.command(description="Shows your stats on this server")
+@bot.command(description="Shows your stats on this server")
 async def stats(ctx: commands.Context):
     stats = db.get_stats(ctx.guild.id, ctx.author.id)
     username, xp, msg_count, voice_uptime = stats
@@ -140,91 +158,124 @@ async def stats(ctx: commands.Context):
     embed.add_field(name="Vocal", value=f"{voice_uptime//60}h{voice_uptime%60:02d}")
     await ctx.respond(embed=embed)
 
+@bot.command(description="Shows the roles and the XP required to get them")
+async def info(ctx: commands.Context):
+    server_config = cached.get_server(ctx.guild.id).config
+    embed = discord.Embed(
+        title="Roles",
+        color=0x82c778,
+    )
+    add_role_fields(embed, server_config)
+    await ctx.respond(embed=embed)
+
 
 # Mod commands
-@xpbot.command()
-async def set_xp(ctx: commands.Context, member: discord.Member, xp: int):
+
+@bot.command()
+async def user_xp(ctx: commands.Context, member: discord.Member, xp: int):
     if await is_mod(ctx):
         db.set_user_xp(ctx.guild.id, member.id, xp)
         await update_role(member, db.get_server_config(ctx.guild.id), xp)
         cached.update_server_config(db.get_server_config(ctx.guild.id))
         await ctx.respond('Done')
 
-@xpbot.command()
-async def set_channels(ctx: commands.Context):
+
+
+config = bot.create_group('config', "Manage bot configuration for this server")
+
+@config.command(description="Show the full bot configuration for this server")
+async def show(ctx: commands.Context):
     if await is_mod(ctx):
-        await ctx.respond('Select the channels you want to track', view=ChannelView())
+        server_config = cached.get_server(ctx.guild.id).config
+        embed = discord.Embed(
+            title="XP Bot configuration",
+            color=0x82c778,
+        )
+        embed.add_field(name="Mod role", value=f"<@&{server_config.mod_role}>", inline=False)
+        embed.add_field(name=" ", value="**=== Automatic roles ===**", inline=False)
+        add_role_fields(embed, server_config)
+        embed.add_field(name=" ", value="**=== Tracked channels ===**", inline=False)
+        add_channel_fields(embed, server_config)
+        embed.add_field(name=" ", value="**=== XP rates ===**", inline=False)
+        add_xprate_fields(embed, server_config)
+        await ctx.respond(embed=embed)
 
-class ChannelView(discord.ui.View):
-    @discord.ui.select(
-        select_type=discord.ComponentType.channel_select,
-        max_values=25,
-        min_values=1,
-        channel_types=[discord.ChannelType.text, discord.ChannelType.voice]
-    )
-    async def select_callback(self, select, interaction):
-        db.edit_channels(interaction.guild.id, [(channel.id, channel.type.value) for channel in select.values])
-        cached.update_server_config(db.get_server_config(interaction.guild.id))
-        await interaction.response.send_message('Done', ephemeral=True)
-        
 
-role = xpbot.create_subgroup('role', "Manage automatic roles")
+channel = config.create_subgroup('channel', "Manage channels")
 
-@role.command()
+@channel.command(description="Add a channel to the list of channels to track")
+async def add(ctx: commands.Context, channel: discord.TextChannel | discord.VoiceChannel):
+    if await is_mod(ctx):
+        db.add_channel(ctx.guild.id, channel.id, channel.type.value)
+        cached.update_server_config(db.get_server_config(ctx.guild.id))
+        await ctx.respond('Done')
+
+@channel.command(description="Remove a channel from the list of channels to track")
+async def rm(ctx: commands.Context, channel: discord.TextChannel | discord.VoiceChannel):
+    if await is_mod(ctx):
+        db.rm_channel(channel.id)
+        cached.update_server_config(db.get_server_config(ctx.guild.id))
+        await ctx.respond('Done')
+
+@channel.command(description="Show the list of channels to track")
+async def show(ctx: commands.Context):
+    if await is_mod(ctx):
+        server_config = cached.get_server(ctx.guild.id).config
+        embed = discord.Embed(
+            title="Channels",
+            color=0x82c778,
+        )
+        add_channel_fields(embed, server_config)
+        await ctx.respond(embed=embed)
+
+
+role = config.create_subgroup('role', "Manage automatic roles")
+
+@role.command(description="Add a role to the list of automatic roles")
 async def add(ctx: commands.Context, role: discord.Role, xp_threshold: int):
     if await is_mod(ctx):
         db.set_role(ctx.guild.id, role.id, xp_threshold)
         cached.update_server_config(db.get_server_config(ctx.guild.id))
         await ctx.respond('Done')
 
-@role.command()
+@role.command(description="Remove a role from the list of automatic roles")
 async def rm(ctx: commands.Context, role: discord.Role):
     if await is_mod(ctx):
         db.rm_role(role.id)
         cached.update_server_config(db.get_server_config(ctx.guild.id))
         await ctx.respond('Done')
 
-@role.command()
+@role.command(description="Show the list of automatic roles")
 async def show(ctx: commands.Context):
     if await is_mod(ctx):
-        roles = cached.get_server(ctx.guild.id).config.roles
-        role_column = []
-        xp_column = []
-        for n, (role_id, xp) in enumerate(roles):
-            # role = discord.utils.get(ctx.guild.roles, id=role_id)
-            role_column.append(f"`{n}.` <@&{role_id}>")
-            xp_column.append(f"`{xp}`")
+        info(ctx)
 
+
+rate = config.create_subgroup('rate', "Manage XP rate")
+
+@rate.command(description="Set the XP rate for text and voice channels")
+async def set(ctx: commands.Context, text: int, voice: int):
+    if await is_mod(ctx):
+        db.set_xp_rate_text(ctx.guild.id, text)
+        db.set_xp_rate_voice(ctx.guild.id, voice)
+        cached.update_server_config(db.get_server_config(ctx.guild.id))
+        await ctx.respond('Done')
+
+@rate.command(description="Show the XP rate for text and voice channels")
+async def show(ctx: commands.Context):
+    if await is_mod(ctx):
+        server_config = cached.get_server(ctx.guild.id).config
         embed = discord.Embed(
-            title="Roles",
+            title="XP rate",
             color=0x82c778,
         )
-        embed.add_field(name="Role", value="\n".join(role_column), inline=True)
-        embed.add_field(name="XP required", value="\n".join(xp_column), inline=True)
-
+        add_xprate_fields(embed, server_config)
         await ctx.respond(embed=embed)
 
 
-xprate = xpbot.create_subgroup('set_xp_rate', "Manage XP rate")
-
-@xprate.command()
-async def voice(ctx: commands.Context, xp_rate: int):
-    if await is_mod(ctx):
-        db.set_xp_rate_voice(ctx.guild.id, xp_rate)
-        cached.update_server_config(db.get_server_config(ctx.guild.id))
-        await ctx.respond('Done')
-
-@xprate.command()
-async def text(ctx: commands.Context, xp_rate: int):
-    if await is_mod(ctx):
-        db.set_xp_rate_text(ctx.guild.id, xp_rate)
-        cached.update_server_config(db.get_server_config(ctx.guild.id))
-        await ctx.respond('Done')
-
-
 # Admin commands
-@xpbot.command()
-async def set_mod_role(ctx: commands.Context, role: discord.Role):
+@config.command()
+async def mod_role(ctx: commands.Context, role: discord.Role):
     if ctx.author.guild_permissions.administrator:
         db.set_mod_role(ctx.guild.id, role.id)
         cached.update_server_config(db.get_server_config(ctx.guild.id))

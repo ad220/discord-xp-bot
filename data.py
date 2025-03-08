@@ -71,9 +71,13 @@ class Database:
         self.con.commit()
 
 
-    def edit_channels(self, server_id: int, channels: list[tuple[int, int]]) -> None:
-        self.cur.execute('DELETE FROM channels WHERE server_id = ?', (server_id,))
-        self.cur.executemany('INSERT INTO channels VALUES (?, ?, ?)', [(channel_id, channel_type, server_id) for (channel_id, channel_type) in channels])
+    def add_channel(self, server_id: int, channel_id: int, channel_type: int) -> None:
+        self.cur.execute('INSERT INTO channels (id, type, server_id) VALUES (?, ?, ?)', (channel_id, channel_type, server_id))
+        self.con.commit()
+
+
+    def rm_channel(self, channel_id: int) -> None:
+        self.cur.execute('DELETE FROM channels WHERE id = ?', (channel_id,))
         self.con.commit()
 
 
