@@ -24,20 +24,16 @@ cached = cache.CachedData()
 # ================================
 
 async def update_role(member: discord.Member, server_config: ServerConfig, xp: int):
-    max_thr = -1
-    new_role = None
-    current_role = None
     member_roles = [role.id for role in member.roles]
-    for role_id, role_thr in server_config.roles:
-        if role_id in member_roles:
-            current_role = role_id
-        if role_thr > max_thr and xp >= role_thr:
-            max_thr = role_thr
-            new_role = role_id
-    if new_role:
-        if current_role:
-            await member.remove_roles(discord.Object(current_role))
-        await member.add_roles(discord.Object(new_role))
+    n_role = 0
+    while n_role < len(server_config.roles) and server_config.roles[n_role][0] not in member_roles:
+        n_role += 1
+    if n_role+1 < len(server_config.roles):
+        if xp >= server_config.roles[n_role+1][1]:
+            await member.add_roles(discord.Object(server_config.roles[n_role+1][0]))
+            await member.remove_roles(discord.Object(server_config.roles[n_role][0]))
+    else:
+        await member.add_roles(discord.Object(server_config.roles[0][0]))
 
 
 async def is_mod(ctx: commands.Context):
