@@ -154,11 +154,10 @@ class Database:
         self.con.commit()
 
 
-    def get_leaderboard(self, server_id: int) -> list[tuple[str, int]]:
-        self.cur.execute('SELECT username, xp FROM users WHERE server_id = ? ORDER BY xp DESC', (server_id,))
-        return self.cur.fetchmany(10)
-
-
-    def get_stats(self, server_id, user_id: int) -> tuple[str, int, int]:
+    def get_user(self, server_id, user_id: int) -> tuple:
         self.cur.execute('SELECT username, xp, msg_count, voice_uptime FROM users WHERE server_id = ? AND discord_id = ?', (server_id, user_id))
         return self.cur.fetchone()
+
+    def get_users(self, server_id: int) -> list[tuple]:
+        self.cur.execute('SELECT username, discord_id, xp, msg_count, voice_uptime FROM users WHERE server_id = ? ORDER BY xp DESC', (server_id,))
+        return self.cur.fetchmany(10)

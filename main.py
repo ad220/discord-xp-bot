@@ -1,4 +1,6 @@
 import os
+import sys
+import signal
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -130,15 +132,15 @@ async def on_voice_state_update(member: discord.Member,
 # User commands
 @bot.command(description="Shows the top 10 most active users of the server")
 async def leaderboard(ctx: commands.Context):
-    users = db.get_leaderboard(ctx.guild.id)
+    users = db.get_users(ctx.guild.id)
     embed = discord.Embed(
         title="Leaderboard",
         color=0x82c778,
     )
     user_column, xp_column = [], []
     for i, user in enumerate(users):
-        username, xp = user
-        user_column.append(f"`{i+1}.` {username}")
+        _, discord_id, xp, _, _ = user
+        user_column.append(f"`{i+1}.` <@{discord_id}>")
         xp_column.append(f"`{xp}`")
 
     embed.add_field(name="Top 10", value="\n".join(user_column), inline=True)
@@ -147,8 +149,8 @@ async def leaderboard(ctx: commands.Context):
 
 @bot.command(description="Shows your stats on this server")
 async def stats(ctx: commands.Context):
-    stats = db.get_stats(ctx.guild.id, ctx.author.id)
-    username, xp, msg_count, voice_uptime = stats
+    stats = db.get_user(ctx.guild.id, ctx.author.id)
+    username, _, xp, msg_count, voice_uptime = stats
     embed = discord.Embed(
         title=f"{username}'s stats",
         color=0x82c778,
