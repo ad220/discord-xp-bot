@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import signal
 import discord
 from discord.ext import commands
@@ -65,6 +66,16 @@ def add_xprate_fields(embed: discord.Embed, server_config: ServerConfig):
     embed.add_field(name="Text", value=f"`{server_config.rate_txt}` XP/msg", inline=True)
     embed.add_field(name="Voice", value=f"`{server_config.rate_voice}` XP/min", inline=True)
 
+def on_exit():
+    server: cache.CachedServer
+    for server in cached.data.values():
+        voice_update: cache.VoiceUpdate
+        for voice_update in server.voice_updates.values():
+            if voice_update.is_connected:
+                uptime = time.time() // 60 - voice_update.update_time // 60
+                db.add_user_xp(server.id, voice_update.user_id, server.config.rate_voice * uptime)
+                db.add_user_voice_uptime(server.id, voice_update.user_id, uptime)
+
 
 # ================================
 # Events
@@ -76,7 +87,13 @@ async def on_ready():
     db.create_tables()
     servers = db.get_servers()
     for server in servers:
-        cached.add_server(db.get_server_config(server))
+        config = db.get_server_config(server)
+        cached.add_server(config)
+        for channel in config.channels['voice']:
+            voice_states: dict[int:discord.VoiceState] = bot.get_channel(channel).voice_states
+            for user_id in voice_states:
+                member = bot.get_guild(server).get_member(user_id)
+                cached.get_server(server).add_voice_update(member, voice_states[user_id])
     print(f'We have logged in as {bot.user}')
 
 @bot.event
@@ -150,7 +167,7 @@ async def leaderboard(ctx: commands.Context):
 @bot.command(description="Shows your stats on this server")
 async def stats(ctx: commands.Context):
     stats = db.get_user(ctx.guild.id, ctx.author.id)
-    username, _, xp, msg_count, voice_uptime = stats
+    username, xp, msg_count, voice_uptime = stats
     embed = discord.Embed(
         title=f"{username}'s stats",
         color=0x82c778,
@@ -288,3 +305,4 @@ async def mod_role(ctx: commands.Context, role: discord.Role):
 
 if __name__ == '__main__':
     bot.run(token)
+    on_exit()

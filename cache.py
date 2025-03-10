@@ -48,8 +48,6 @@ class CachedServer():
         self.voice_updates[member.id] = update
 
 
-
-
 class CachedData():
     def __init__(self):
         self.data: dict[int:CachedServer] = {}
