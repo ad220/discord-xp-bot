@@ -66,6 +66,13 @@ def add_xprate_fields(embed: discord.Embed, server_config: ServerConfig):
     embed.add_field(name="Text", value=f"`{server_config.rate_txt}` XP/msg", inline=True)
     embed.add_field(name="Voice", value=f"`{server_config.rate_voice}` XP/min", inline=True)
 
+def is_channel_visible(ctx: commands.context, channel_id: int):
+    channel = bot.get_channel(channel_id)
+    if channel:
+        perms = bot.get_channel(channel.id).permissions_for(ctx.guild.me)
+        return perms.read_messages or perms.view_channel
+    return False
+
 def on_exit():
     server: cache.CachedServer
     for server in cached.data.values():
@@ -144,7 +151,6 @@ async def on_voice_state_update(member: discord.Member,
 # ================================
 # Commands
 # ================================
-
 
 # User commands
 @bot.command(description="Shows the top 10 most active users of the server")
@@ -227,6 +233,8 @@ async def add(ctx: commands.Context, channel: discord.TextChannel | discord.Voic
     if await is_mod(ctx):
         db.add_channel(ctx.guild.id, channel.id, channel.type.value)
         cached.update_server_config(db.get_server_config(ctx.guild.id))
+        if not is_channel_visible(ctx, channel.id):
+            await ctx.respond(f"Warning: I cannot see <#{channel.id}>, please check my permissions")
         await ctx.respond('Done')
 
 @channel.command(description="Remove a channel from the list of channels to track")
@@ -246,6 +254,13 @@ async def show(ctx: commands.Context):
         )
         add_channel_fields(embed, server_config)
         await ctx.respond(embed=embed)
+        
+        unavailable_channels = []
+        for channel_id in server_config.channels['text'] + server_config.channels['voice']:
+            if not is_channel_visible(ctx, channel_id):
+                unavailable_channels.append(f"<#{channel_id}>")
+        if unavailable_channels:
+            await ctx.send(f"Warning: I cannot see the following channels {', '.join(unavailable_channels)}, please check my permissions")
 
 
 role = config.create_subgroup('role', "Manage automatic roles")
