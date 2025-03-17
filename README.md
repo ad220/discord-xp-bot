@@ -27,9 +27,11 @@ A simple Discord bot that tracks users activity in a server and rewards them wit
 4. Execute the setup script with `bash setup.sh`
     - Make sure the bot is running properly with `service discord_xp_bot status`
 5. Invite the bot to your server using the install link
-6. Setup the bot in your Discord server
-    - First, define the mod role using `/xpbot set_mod_role @<role>` with the owner of the server. You should now be able to use the rest of the commands with any user with the mod role.
-    - Then, define the channels to track with `/xpbot set_channels`. Make sure the bot is also able to see the channels you want to track, respecting the permissions of the bot role.
-    - Define the roles to assign with `/xpbot role add @<role> <xp>`. All the roles added should be lower than the bot's one in the server role hierarchy. They should also be non-mentionable and the bot's role should not have the "mention @everyone" permission.
-    - Define the XP rates with `/xpbot set_xp_rate {text/voice} <xp>`. The value is the amount of XP given per message sent or per minute spent in a voice channel.
-7. Enjoy the bot!
+6. Set up the Discord permissions for the bot on the server so that the commands can only be used in the proper channels and by the user you want.
+7. Setup the bot in your Discord server
+    - First, define the mod role using `/config mod_role @<role>` with the owner of the server. You should now be able to use the rest of the commands with any user with the mod role.
+    - Then, define the channels to track with `/config channel <add|rm|show>`. Make sure the bot is also able to see the channels you want to track, respecting the permissions of the bot role.
+    - Define the roles to assign with `/config role <add|rm|show>`. The `xp_threshold` argument is the amount of xp needed to automatically grant the specified `role`. All the added roles should be lower than the bot's one in the server role hierarchy. They should also be non-mentionable and the bot's role should not have the "mention @everyone" permission.
+    - Define the XP rates with `/config rate <text|voice>`. The first argument is the amount of XP given per message sent or per minute spent in a voice channel. For the xp given per text message, you can also configure the msg cooldown before xp is granted again (to avoid spamming) and a factor reducing the xp gained for each subsequent message in the same day, down to the defined minimum and only for user with more than the "rank xp threshold".
+    - Check the full config with `/config show`
+8. Enjoy the bot!
