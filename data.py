@@ -15,12 +15,34 @@ class Database:
         self.con.close()
 
 
-    def create_tables(self) -> None: 
-        self.cur.execute('CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY, name TEXT, xprate_msg INTEGER DEFAULT 1, xprate_voice INTEGER DEFAULT 1, mod_role INTEGER DEFAULT 0)')
-        self.cur.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, discord_id INTEGER, server_id INTEGER, xp INTEGER DEFAULT 0, msg_count INTEGER DEFAULT 0, voice_uptime INTEGER DEFAULT 0)') 
+    def init(self) -> None: 
+        self.cur.execute('CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY, name TEXT, xprate_msg INTEGER DEFAULT 1, xprate_voice INTEGER DEFAULT 1, mod_role INTEGER DEFAULT 0, msg_cooldown INTEGER DEFAULT 0, msg_rankthreshold INTEGER DEFAULT -1, msg_xpfactor REAL DEFAULT 1, msg_xpmin INTEGER DEFAULT 1)')
+        self.cur.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, discord_id INTEGER, server_id INTEGER, xp INTEGER DEFAULT 0, msg_count INTEGER DEFAULT 0, voice_uptime INTEGER DEFAULT 0, lastmsg_time INTEGER DEFAULT 0, lastmsg_xp INTEGER DEFAULT 0)') 
         self.cur.execute('CREATE TABLE IF NOT EXISTS roles (id INTEGER PRIMARY KEY, xp_threshold INTEGER, server_id INTEGER)')
         self.cur.execute('CREATE TABLE IF NOT EXISTS channels (id INTEGER PRIMARY KEY, type INTEGER, server_id INTEGER)')
         self.con.commit()
+        
+        self.cur.execute('PRAGMA table_info(servers)')
+        nb_columns = len(self.cur.fetchall())
+        if nb_columns == 5:
+            self.cur.execute('ALTER TABLE servers ADD COLUMN msg_cooldown INTEGER DEFAULT 0')
+            self.cur.execute('ALTER TABLE servers ADD COLUMN msg_rankthreshold INTEGER DEFAULT -1')
+            self.cur.execute('ALTER TABLE servers ADD COLUMN msg_xpfactor REAL DEFAULT 1')
+            self.cur.execute('ALTER TABLE servers ADD COLUMN msg_xpmin INTEGER DEFAULT 1')
+            self.con.commit()
+        elif nb_columns != 9:
+            self.con.close()
+            raise Exception('Database schema is unknown')
+
+        self.cur.execute('PRAGMA table_info(users)')
+        nb_columns = len(self.cur.fetchall())
+        if nb_columns == 7:
+            self.cur.execute('ALTER TABLE users ADD COLUMN lastmsg_time INTEGER DEFAULT 0')
+            self.cur.execute('ALTER TABLE users ADD COLUMN lastmsg_xp INTEGER DEFAULT 0')
+            self.con.commit()
+        elif nb_columns != 9:
+            self.con.close()
+            raise Exception('Database schema is unknown')
 
 
     def add_server(self, server_id: int, server_name: str) -> None:
@@ -83,7 +105,7 @@ class Database:
 
     def get_server_config(self, server_id: int) -> cache.ServerConfig:
         self.cur.execute('SELECT * FROM servers WHERE id = ?', (server_id,))
-        guild_id, name, rate_txt, rate_voice, mod_role = self.cur.fetchone()
+        guild_id, name, rate_txt, rate_voice, mod_role, msg_cd, msg_rkthr, msg_xpfact, msg_xpmin = self.cur.fetchone()
 
         self.cur.execute('SELECT id, xp_threshold FROM roles WHERE server_id = ? ORDER BY xp_threshold ASC', (server_id,))
         roles = self.cur.fetchall()
@@ -95,14 +117,13 @@ class Database:
         self.cur.execute('SELECT id FROM channels WHERE server_id = ? AND type = ?', (server_id, ChannelType.voice.value))
         channels['voice'] = [channel[0] for channel in self.cur.fetchall()]
 
-        return cache.ServerConfig(guild_id,name, rate_txt, rate_voice, mod_role, roles, channels)
+        return cache.ServerConfig(guild_id,name, rate_txt, rate_voice, mod_role, msg_cd, msg_rkthr, msg_xpfact, msg_xpmin, roles, channels)
     
 
-    def set_xp_rate_text(self, server_id: int, xp_rate: int) -> int:
-        self.cur.execute('UPDATE servers SET xprate_msg = ? WHERE id = ?', (xp_rate, server_id))
+    def set_xp_rate_text(self, server_id: int, xp_rate: int, msg_cooldown: int, msg_rankthr: int, msg_xpfactor: float, msg_xpmin: int) -> int:
+        self.cur.execute('UPDATE servers SET (xprate_msg, msg_cooldown, msg_rankthreshold, msg_xpfactor, msg_xpmin) = (?, ?, ?, ?, ?) WHERE id = ?', (xp_rate, msg_cooldown, msg_rankthr, msg_xpfactor, msg_xpmin, server_id))
         self.con.commit()
 
-    
     def set_xp_rate_voice(self, server_id: int, xp_rate: int) -> None:
         self.cur.execute('UPDATE servers SET xprate_voice = ? WHERE id = ?', (xp_rate, server_id))
         self.con.commit()
@@ -155,9 +176,29 @@ class Database:
 
 
     def get_user(self, server_id, user_id: int) -> tuple:
-        self.cur.execute('SELECT username, xp, msg_count, voice_uptime FROM users WHERE server_id = ? AND discord_id = ?', (server_id, user_id))
+        self.cur.execute('SELECT username, xp, msg_count, voice_uptime, lastmsg_time, lastmsg_xp FROM users WHERE server_id = ? AND discord_id = ?', (server_id, user_id))
         return self.cur.fetchone()
 
     def get_users(self, server_id: int) -> list[tuple]:
-        self.cur.execute('SELECT username, discord_id, xp, msg_count, voice_uptime FROM users WHERE server_id = ? ORDER BY xp DESC', (server_id,))
+        self.cur.execute('SELECT username, discord_id, xp, msg_count, voice_uptime, lastmsg_time, lastmsg_xp FROM users WHERE server_id = ? ORDER BY xp DESC', (server_id,))
         return self.cur.fetchmany(10)
+    
+    def update_user(self, server_id: int, user_id: int, xp: int|None = None, msg_count: int|None = None, voice_uptime: int|None = None, lastmsg_time: int|None = None, lastmsg_xp: int|None = None) -> None:
+        updated = False
+        if xp is not None:
+            self.cur.execute('UPDATE users SET xp = ? WHERE server_id = ? AND discord_id = ?', (xp, server_id, user_id))
+            updated = True
+        if msg_count is not None:
+            self.cur.execute('UPDATE users SET msg_count = ? WHERE server_id = ? AND discord_id = ?', (msg_count, server_id, user_id))
+            updated = True
+        if voice_uptime is not None:
+            self.cur.execute('UPDATE users SET voice_uptime = ? WHERE server_id = ? AND discord_id = ?', (voice_uptime, server_id, user_id))
+            updated = True
+        if lastmsg_time is not None:
+            self.cur.execute('UPDATE users SET lastmsg_time = ? WHERE server_id = ? AND discord_id = ?', (lastmsg_time, server_id, user_id))
+            updated = True
+        if lastmsg_xp is not None:
+            self.cur.execute('UPDATE users SET lastmsg_xp = ? WHERE server_id = ? AND discord_id = ?', (lastmsg_xp, server_id, user_id))
+            updated = True
+        if updated:
+            self.con.commit()

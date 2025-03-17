@@ -1,7 +1,6 @@
 import os
-import sys
 import time
-import signal
+import datetime
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -42,7 +41,7 @@ async def is_mod(ctx: commands.Context):
     mod_role = cached.get_server(ctx.guild.id).config.mod_role
     if mod_role in [role.id for role in ctx.author.roles]:
         return True
-    await ctx.respond(f"You must be <@&{mod_role}> to use this command")
+    await ctx.respond(f"You must be <{mod_role}> to use this command")
     return False
 
 def add_channel_fields(embed: discord.Embed, server_config: ServerConfig):
@@ -63,8 +62,8 @@ def add_role_fields(embed: discord.Embed, server_config: ServerConfig):
     embed.add_field(name="XP required", value="\n".join(xp_column), inline=True)
 
 def add_xprate_fields(embed: discord.Embed, server_config: ServerConfig):
-    embed.add_field(name="Text", value=f"`{server_config.rate_txt}` XP/msg", inline=True)
-    embed.add_field(name="Voice", value=f"`{server_config.rate_voice}` XP/min", inline=True)
+    embed.add_field(name="Text", value=f"`{server_config.rate_txt}`/msg", inline=True)
+    embed.add_field(name="Voice", value=f"`{server_config.rate_voice}`/min", inline=True)
 
 def is_channel_visible(ctx: commands.context, channel_id: int):
     channel = bot.get_channel(channel_id)
@@ -91,7 +90,7 @@ def on_exit():
 @bot.event
 async def on_ready():
     await bot.change_presence(status=discord.Status.invisible)
-    db.create_tables()
+    db.init()
     servers = db.get_servers()
     for server in servers:
         config = db.get_server_config(server)
@@ -125,9 +124,24 @@ async def on_message(message: discord.Message):
         return
     server_config = cached.get_server(message.guild.id).config
     if message.channel.id in server_config.channels['text']:
-        xp = db.add_user_xp(message.guild.id, message.author.id, server_config.rate_txt)
-        db.add_user_msg_count(message.guild.id, message.author.id)
-        await update_role(message.author, server_config, xp)
+        _, xp, msg_count, _, lastmsg_time, lastmsg_xp = db.get_user(message.guild.id, message.author.id)
+        msg_count += 1
+        newmsg_time = time.time()
+        if newmsg_time - lastmsg_time >= server_config.msg_cooldown:
+            is_new_user = server_config.msg_rankthr == -1 or xp < server_config.msg_rankthr
+            new_date = datetime.datetime.fromtimestamp(newmsg_time)
+            last_date = datetime.datetime.fromtimestamp(lastmsg_time)
+            if is_new_user or new_date.date() != last_date.date():
+                xp += server_config.rate_txt
+                lastmsg_xp = server_config.rate_txt
+            else:
+                new_xp = max(int(lastmsg_xp * server_config.msg_xpfactor), server_config.msg_xpmin)
+                xp += new_xp
+                lastmsg_xp = new_xp
+            db.update_user(message.guild.id, message.author.id, msg_count=msg_count, xp=xp, lastmsg_time=newmsg_time, lastmsg_xp=lastmsg_xp)
+            await update_role(message.author, server_config, xp)
+        else:
+            db.update_user(message.guild.id, message.author.id, msg_count=msg_count)
 
 @bot.event
 async def on_voice_state_update(member: discord.Member,
@@ -162,7 +176,7 @@ async def leaderboard(ctx: commands.Context):
     )
     user_column, xp_column = [], []
     for i, user in enumerate(users):
-        _, discord_id, xp, _, _ = user
+        _, discord_id, xp, _, _, _, _ = user
         user_column.append(f"`{i+1}.` <@{discord_id}>")
         xp_column.append(f"`{xp}`")
 
@@ -173,7 +187,7 @@ async def leaderboard(ctx: commands.Context):
 @bot.command(description="Shows your stats on this server")
 async def stats(ctx: commands.Context):
     stats = db.get_user(ctx.guild.id, ctx.author.id)
-    username, xp, msg_count, voice_uptime = stats
+    username, xp, msg_count, voice_uptime, _, _ = stats
     embed = discord.Embed(
         title=f"{username}'s stats",
         color=0x82c778,
@@ -287,11 +301,17 @@ async def show(ctx: commands.Context):
 
 rate = config.create_subgroup('rate', "Manage XP rate")
 
-@rate.command(description="Set the XP rate for text and voice channels")
-async def set(ctx: commands.Context, text: int, voice: int):
+@rate.command(description="Set the XP rate for text channel. Check documentation for more info")
+async def text(ctx: commands.Context, base_xp_per_msg: int, cooldown_in_sec: int = 0, xp_factor: float = 1, min_xp: int = 1, rank_xp_threshold: int = -1):
     if await is_mod(ctx):
-        db.set_xp_rate_text(ctx.guild.id, text)
-        db.set_xp_rate_voice(ctx.guild.id, voice)
+        db.set_xp_rate_text(ctx.guild.id, base_xp_per_msg, cooldown_in_sec, rank_xp_threshold, xp_factor, min_xp)
+        cached.update_server_config(db.get_server_config(ctx.guild.id))
+        await ctx.respond('Done')
+
+@rate.command(description="Set the XP rate for voice channels")
+async def voice(ctx: commands.Context, xp_per_minute: int):
+    if await is_mod(ctx):
+        db.set_xp_rate_voice(ctx.guild.id, xp_per_minute)
         cached.update_server_config(db.get_server_config(ctx.guild.id))
         await ctx.respond('Done')
 

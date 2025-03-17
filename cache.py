@@ -20,6 +20,10 @@ class ServerConfig():
                  rate_txt: int,
                  rate_voice: int,
                  mod_role: int,
+                 msg_cooldown: int,
+                 msg_rankthr: int,
+                 msg_xpfactor: float,
+                 msg_xpmin: int,
                  roles: dict[int:int],
                  channels: dict):
         self.id: int = server_id
@@ -27,9 +31,16 @@ class ServerConfig():
         self.rate_txt: int = rate_txt
         self.rate_voice: int = rate_voice
         self.mod_role: int = mod_role
+        self.msg_cooldown: int = msg_cooldown
+        self.msg_rankthr: int = msg_rankthr
+        self.msg_xpfactor: float = msg_xpfactor
+        self.msg_xpmin: int = msg_xpmin
         self.roles: list[tuple[int, int]] = roles
-        self.channels: dict = channels    
-
+        self.channels: dict = channels
+    
+    def __str__(self):
+        nl = '\n'
+        return f"ServerConfig(\n   {f',{nl}   '.join([f'{k}: {v}' for k, v in self.__dict__.items()])}\n)"
 
 class CachedServer():
     def __init__(self, config: ServerConfig):
