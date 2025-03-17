@@ -26,16 +26,14 @@ cached = cache.CachedData()
 # ================================
 
 async def update_role(member: discord.Member, server_config: ServerConfig, xp: int):
-    member_roles = [role.id for role in member.roles]
+    member_roles = [role.id for role in member.roles]    
     n_role = 0
-    while n_role < len(server_config.roles) and server_config.roles[n_role][0] not in member_roles:
+    while n_role < len(server_config.roles) and server_config.roles[n_role][1] <= xp:
         n_role += 1
-    if n_role+1 < len(server_config.roles):
-        if xp >= server_config.roles[n_role+1][1]:
-            await member.add_roles(discord.Object(server_config.roles[n_role+1][0]))
-            await member.remove_roles(discord.Object(server_config.roles[n_role][0]))
-    else:
-        await member.add_roles(discord.Object(server_config.roles[0][0]))
+
+    if n_role>0 and server_config.roles[n_role-1][0] not in member_roles:
+        await member.remove_roles(*[discord.Object(role_id) for role_id, _ in server_config.roles])
+        await member.add_roles(discord.Object(server_config.roles[n_role-1][0]))
 
 async def is_mod(ctx: commands.Context):
     mod_role = cached.get_server(ctx.guild.id).config.mod_role
@@ -219,6 +217,17 @@ async def user_xp(ctx: commands.Context, member: discord.Member, xp: int):
         await ctx.respond('Done')
 
 
+@bot.command()
+async def refresh_roles(ctx: commands.Context):
+    if await is_mod(ctx):
+        await ctx.send('Refreshing roles...')
+        server_config = cached.get_server(ctx.guild.id).config
+        users = db.get_users(ctx.guild.id)
+        for _, discord_id, xp, _, _, _, _ in users:
+            member = ctx.guild.get_member(discord_id)
+            await update_role(member, server_config, xp)
+        await ctx.respond('Done')
+
 
 config = bot.create_group('config', "Manage bot configuration for this server")
 
@@ -296,7 +305,7 @@ async def rm(ctx: commands.Context, role: discord.Role):
 @role.command(description="Show the list of automatic roles")
 async def show(ctx: commands.Context):
     if await is_mod(ctx):
-        info(ctx)
+        await info(ctx)
 
 
 rate = config.create_subgroup('rate', "Manage XP rate")
