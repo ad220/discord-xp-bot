@@ -115,6 +115,8 @@ async def on_guild_remove(guild: discord.Guild):
 @bot.event
 async def on_member_join(member):
     db.add_user(member.guild.id, member.id, member.name)
+    server_config = cached.get_server(member.guild.id).config
+    await update_role(member, server_config, 0)
 
 @bot.event
 async def on_message(message: discord.Message):
