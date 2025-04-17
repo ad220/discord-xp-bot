@@ -179,9 +179,9 @@ class Database:
         self.cur.execute('SELECT username, xp, msg_count, voice_uptime, lastmsg_time, lastmsg_xp FROM users WHERE server_id = ? AND discord_id = ?', (server_id, user_id))
         return self.cur.fetchone()
 
-    def get_users(self, server_id: int) -> list[tuple]:
+    def get_users(self, server_id: int, n_users: int = None) -> list[tuple]:
         self.cur.execute('SELECT username, discord_id, xp, msg_count, voice_uptime, lastmsg_time, lastmsg_xp FROM users WHERE server_id = ? ORDER BY xp DESC', (server_id,))
-        return self.cur.fetchmany(10)
+        return self.cur.fetchmany(n_users) if n_users else self.cur.fetchall()
     
     def update_user(self, server_id: int, user_id: int, xp: int|None = None, msg_count: int|None = None, voice_uptime: int|None = None, lastmsg_time: int|None = None, lastmsg_xp: int|None = None) -> None:
         updated = False

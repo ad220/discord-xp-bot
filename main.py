@@ -93,11 +93,19 @@ async def on_ready():
     for server in servers:
         config = db.get_server_config(server)
         cached.add_server(config)
+
+        guild = bot.get_guild(server)
+        users = db.get_users(server)
+        user_ids = [discord_id for _, discord_id, _, _, _, _, _ in users]
+        for member in guild.members:
+            if not member.id in user_ids:
+                db.add_user(server, member.id, member.name)
         for channel in config.channels['voice']:
             voice_states: dict[int:discord.VoiceState] = bot.get_channel(channel).voice_states
             for user_id in voice_states:
                 member = bot.get_guild(server).get_member(user_id)
                 cached.get_server(server).add_voice_update(member, voice_states[user_id])
+        
     print(f'We have logged in as {bot.user}')
 
 @bot.event
@@ -170,7 +178,7 @@ async def on_voice_state_update(member: discord.Member,
 # User commands
 @bot.command(description="Shows the top 10 most active users of the server")
 async def leaderboard(ctx: commands.Context):
-    users = db.get_users(ctx.guild.id)
+    users = db.get_users(ctx.guild.id, 10)
     embed = discord.Embed(
         title="Leaderboard",
         color=0x82c778,
