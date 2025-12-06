@@ -96,7 +96,7 @@ async def on_ready():
 
         guild = bot.get_guild(server)
         users = db.get_users(server)
-        user_ids = [discord_id for _, discord_id, _, _, _, _, _ in users]
+        user_ids = [u.discord_id for u in users]
         for member in guild.members:
             if not member.id in user_ids:
                 db.add_user(server, member.id, member.name)
@@ -132,24 +132,24 @@ async def on_message(message: discord.Message):
         return
     server_config = cached.get_server(message.guild.id).config
     if message.channel.id in server_config.channels['text']:
-        _, xp, msg_count, _, lastmsg_time, lastmsg_xp = db.get_user(message.guild.id, message.author.id)
-        msg_count += 1
+        user = db.get_user(message.guild.id, message.author.id)
+        user.msg_count += 1
         newmsg_time = time.time()
-        if newmsg_time - lastmsg_time >= server_config.msg_cooldown:
-            is_new_user = server_config.msg_rankthr == -1 or xp < server_config.msg_rankthr
+        if newmsg_time - user.lastmsg_time >= server_config.msg_cooldown:
+            is_new_user = server_config.msg_rankthr == -1 or user.xp < server_config.msg_rankthr
             new_date = datetime.datetime.fromtimestamp(newmsg_time)
-            last_date = datetime.datetime.fromtimestamp(lastmsg_time)
+            last_date = datetime.datetime.fromtimestamp(user.lastmsg_time)
             if is_new_user or new_date.date() != last_date.date():
-                xp += server_config.rate_txt
-                lastmsg_xp = server_config.rate_txt
+                user.xp += server_config.rate_txt
+                user.lastmsg_xp = server_config.rate_txt
             else:
-                new_xp = max(int(lastmsg_xp * server_config.msg_xpfactor), server_config.msg_xpmin)
-                xp += new_xp
-                lastmsg_xp = new_xp
-            db.update_user(message.guild.id, message.author.id, msg_count=msg_count, xp=xp, lastmsg_time=newmsg_time, lastmsg_xp=lastmsg_xp)
-            await update_role(message.author, server_config, xp)
+                new_xp = max(int(user.lastmsg_xp * server_config.msg_xpfactor), server_config.msg_xpmin)
+                user.xp += new_xp
+                user.lastmsg_xp = new_xp
+            db.update_user(message.guild.id, message.author.id, msg_count=user.msg_count, xp=user.xp, lastmsg_time=newmsg_time, lastmsg_xp=user.lastmsg_xp)
+            await update_role(message.author, server_config, user.xp)
         else:
-            db.update_user(message.guild.id, message.author.id, msg_count=msg_count)
+            db.update_user(message.guild.id, message.author.id, msg_count=user.msg_count)
 
 @bot.event
 async def on_voice_state_update(member: discord.Member,
@@ -185,9 +185,8 @@ async def leaderboard(ctx: commands.Context):
     )
     user_column, xp_column = [], []
     for i, user in enumerate(users):
-        _, discord_id, xp, _, _, _, _ = user
-        user_column.append(f"`{i+1}.` <@{discord_id}>")
-        xp_column.append(f"`{xp}`")
+        user_column.append(f"`{i+1}.` <@{user.discord_id}>")
+        xp_column.append(f"`{user.xp}`")
 
     embed.add_field(name="Top 10", value="\n".join(user_column), inline=True)
     embed.add_field(name="XP", value="\n".join(xp_column), inline=True)
@@ -195,15 +194,14 @@ async def leaderboard(ctx: commands.Context):
 
 @bot.command(description="Shows your stats on this server")
 async def stats(ctx: commands.Context):
-    stats = db.get_user(ctx.guild.id, ctx.author.id)
-    username, xp, msg_count, voice_uptime, _, _ = stats
+    user = db.get_user(ctx.guild.id, ctx.author.id)
     embed = discord.Embed(
-        title=f"{username}'s stats",
+        title=f"{user.username}'s stats",
         color=0x82c778,
     )
-    embed.add_field(name="XP", value=f"{xp} XP")
-    embed.add_field(name="Texts", value=f"{msg_count} msg")
-    embed.add_field(name="Vocal", value=f"{voice_uptime//60}h{voice_uptime%60:02d}")
+    embed.add_field(name="XP", value=f"{user.xp} XP")
+    embed.add_field(name="Texts", value=f"{user.msg_count} msg")
+    embed.add_field(name="Vocal", value=f"{user.voice_uptime//60}h{user.voice_uptime%60:02d}")
     await ctx.respond(embed=embed)
 
 @bot.command(description="Shows the roles and the XP required to get them")
@@ -234,9 +232,9 @@ async def refresh_roles(ctx: commands.Context):
         await ctx.send('Refreshing roles...')
         server_config = cached.get_server(ctx.guild.id).config
         users = db.get_users(ctx.guild.id)
-        for _, discord_id, xp, _, _, _, _ in users:
-            member = ctx.guild.get_member(discord_id)
-            await update_role(member, server_config, xp)
+        for u in users:
+            member = ctx.guild.get_member(u.discord_id)
+            await update_role(member, server_config, u.xp)
         await ctx.respond('Done')
 
 

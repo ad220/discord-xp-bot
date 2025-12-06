@@ -1,5 +1,6 @@
 import sqlite3
 from discord.enums import ChannelType
+from user import User
 
 import cache
 
@@ -17,7 +18,7 @@ class Database:
 
     def init(self) -> None: 
         self.cur.execute('CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY, name TEXT, xprate_msg INTEGER DEFAULT 1, xprate_voice INTEGER DEFAULT 1, mod_role INTEGER DEFAULT 0, msg_cooldown INTEGER DEFAULT 0, msg_rankthreshold INTEGER DEFAULT -1, msg_xpfactor REAL DEFAULT 1, msg_xpmin INTEGER DEFAULT 1)')
-        self.cur.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, discord_id INTEGER, server_id INTEGER, xp INTEGER DEFAULT 0, msg_count INTEGER DEFAULT 0, voice_uptime INTEGER DEFAULT 0, lastmsg_time INTEGER DEFAULT 0, lastmsg_xp INTEGER DEFAULT 0)') 
+        self.cur.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, discord_id INTEGER, server_id INTEGER, xp INTEGER DEFAULT 0, msg_count INTEGER DEFAULT 0, voice_uptime INTEGER DEFAULT 0, lastmsg_time INTEGER DEFAULT 0, lastmsg_xp INTEGER DEFAULT 0, currency INTEGER DEFAULT 0, lastcur_date INTEGER DEFAULT 0)') 
         self.cur.execute('CREATE TABLE IF NOT EXISTS roles (id INTEGER PRIMARY KEY, xp_threshold INTEGER, server_id INTEGER)')
         self.cur.execute('CREATE TABLE IF NOT EXISTS channels (id INTEGER PRIMARY KEY, type INTEGER, server_id INTEGER)')
         self.con.commit()
@@ -40,7 +41,10 @@ class Database:
             self.cur.execute('ALTER TABLE users ADD COLUMN lastmsg_time INTEGER DEFAULT 0')
             self.cur.execute('ALTER TABLE users ADD COLUMN lastmsg_xp INTEGER DEFAULT 0')
             self.con.commit()
-        elif nb_columns != 9:
+        elif nb_columns == 9:
+            self.cur.execute('ALTER TABLE users ADD COLUMN currency INTEGER DEFAULT 0')
+            self.cur.execute('ALTER TABLE users ADD COLUMN lastcur_date INTEGER DEFAULT 0')
+        elif nb_columns != 11:
             self.con.close()
             raise Exception('Database schema is unknown')
 
@@ -175,15 +179,33 @@ class Database:
         self.con.commit()
 
 
-    def get_user(self, server_id, user_id: int) -> tuple:
-        self.cur.execute('SELECT username, xp, msg_count, voice_uptime, lastmsg_time, lastmsg_xp FROM users WHERE server_id = ? AND discord_id = ?', (server_id, user_id))
-        return self.cur.fetchone()
-
-    def get_users(self, server_id: int, n_users: int = None) -> list[tuple]:
-        self.cur.execute('SELECT username, discord_id, xp, msg_count, voice_uptime, lastmsg_time, lastmsg_xp FROM users WHERE server_id = ? ORDER BY xp DESC', (server_id,))
-        return self.cur.fetchmany(n_users) if n_users else self.cur.fetchall()
+    def get_user_currency(self, server_id: int, user_id: int) -> int:
+        self.cur.execute('SELECT currency FROM users WHERE server_id = ? AND discord_id = ?', (server_id, user_id))
+        return self.cur.fetchone()[0]
     
-    def update_user(self, server_id: int, user_id: int, xp: int|None = None, msg_count: int|None = None, voice_uptime: int|None = None, lastmsg_time: int|None = None, lastmsg_xp: int|None = None) -> None:
+    def set_user_currency(self, server_id: int, user_id: int, currency: int) -> None:
+        self.cur.execute('UPDATE users SET currency = ? WHERE server_id = ? AND discord_id = ?', (currency, server_id, user_id))
+        self.con.commit()
+    
+    def add_user_currency(self, server_id: int, user_id: int, currency: int) -> None:
+        self.cur.execute('UPDATE users SET currency = currency + ? WHERE server_id = ? AND discord_id = ?', (currency, server_id, user_id))
+        self.con.commit()
+
+
+    def get_user(self, server_id, user_id: int) -> User:
+        self.cur.execute('SELECT * FROM users WHERE server_id = ? AND discord_id = ?', (server_id, user_id))
+        return User(*self.cur.fetchone())
+
+    def get_users(self, server_id: int, n_users: int = None) -> list[User]:
+        self.cur.execute('SELECT * FROM users WHERE server_id = ? ORDER BY xp DESC', (server_id,))
+        result = self.cur.fetchmany(n_users) if n_users else self.cur.fetchall()
+
+        users = []
+        for params in result:
+            users.append(User(*params))
+        return users
+    
+    def update_user(self, server_id: int, user_id: int, xp: int|None = None, msg_count: int|None = None, voice_uptime: int|None = None, lastmsg_time: int|None = None, lastmsg_xp: int|None = None, currency: int|None = None, lastcur_date: int|None = None) -> None:
         updated = False
         if xp is not None:
             self.cur.execute('UPDATE users SET xp = ? WHERE server_id = ? AND discord_id = ?', (xp, server_id, user_id))
@@ -199,6 +221,12 @@ class Database:
             updated = True
         if lastmsg_xp is not None:
             self.cur.execute('UPDATE users SET lastmsg_xp = ? WHERE server_id = ? AND discord_id = ?', (lastmsg_xp, server_id, user_id))
+            updated = True
+        if currency is not None:
+            self.cur.execute('UPDATE users SET currency = ? WHERE server_id = ? AND discord_id = ?', (currency, server_id, user_id))
+            updated = True
+        if lastcur_date is not None:
+            self.cur.execute('UPDATE users SET lastcur_date = ? WHERE server_id = ? AND discord_id = ?', (lastcur_date, server_id, user_id))
             updated = True
         if updated:
             self.con.commit()
