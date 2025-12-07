@@ -2,7 +2,7 @@ import sqlite3
 from discord.enums import ChannelType
 from user import User
 
-import cache
+import data.cache as cache
 
 DB_PATH = 'data/data.db'
 
