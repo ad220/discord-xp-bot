@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 import discord
 
-from role import Role
-from voice_update import VoiceUpdate
+from .role import Role
+from .voice_update import VoiceUpdate
 
 @dataclass
 class Server():
-    server_id:      int            
+    id:             int            
     name:           str    
     rate_txt:       int
     rate_voice:     int
@@ -15,9 +15,9 @@ class Server():
     msg_rankthr:    int
     msg_xpfactor:   float
     msg_xpmin:      int
-    roles:          list[Role]              = []
-    channels:       dict                    = {}
-    voice_updates:  dict[int:VoiceUpdate]   = {}
+    roles:          list[Role]
+    channels:       dict
+    voice_updates:  dict[int:VoiceUpdate]
     
     def __str__(self):
         nl = '\n'

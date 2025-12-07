@@ -1,4 +1,4 @@
-from server import Server
+from .server import Server
 
 class Cache():
     def __init__(self):
@@ -8,10 +8,10 @@ class Cache():
         return self.data.get(server_id, None)
     
     def add_server(self, server: Server):
-        self.data[server.server_id] = server
+        self.data[server.id] = server
 
     def rm_server(self, server_id: int):
         del self.data[server_id]
     
     def update_server_config(self, server: Server):
-        self.data[server.server_id] = server
+        self.data[server.id] = server

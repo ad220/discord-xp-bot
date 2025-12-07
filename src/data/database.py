@@ -1,8 +1,9 @@
 import sqlite3
 from discord.enums import ChannelType
-from user import User
 
-import data.cache as cache
+from .user import User
+from .server import Server
+from .role import Role
 
 DB_PATH = 'data/data.db'
 
@@ -107,12 +108,12 @@ class Database:
         self.con.commit()
 
 
-    def get_server_config(self, server_id: int) -> cache.ServerConfig:
+    def get_server(self, server_id: int) -> Server:
         self.cur.execute('SELECT * FROM servers WHERE id = ?', (server_id,))
-        guild_id, name, rate_txt, rate_voice, mod_role, msg_cd, msg_rkthr, msg_xpfact, msg_xpmin = self.cur.fetchone()
+        params = self.cur.fetchone()
 
         self.cur.execute('SELECT id, xp_threshold FROM roles WHERE server_id = ? ORDER BY xp_threshold ASC', (server_id,))
-        roles = self.cur.fetchall()
+        roles = [Role(*params) for params in self.cur.fetchall()]
 
         channels = {}
         self.cur.execute('SELECT id FROM channels WHERE server_id = ? AND type = ?', (server_id, ChannelType.text.value))
@@ -121,7 +122,7 @@ class Database:
         self.cur.execute('SELECT id FROM channels WHERE server_id = ? AND type = ?', (server_id, ChannelType.voice.value))
         channels['voice'] = [channel[0] for channel in self.cur.fetchall()]
 
-        return cache.ServerConfig(guild_id,name, rate_txt, rate_voice, mod_role, msg_cd, msg_rkthr, msg_xpfact, msg_xpmin, roles, channels)
+        return Server(*params, roles, channels, {})
     
 
     def set_xp_rate_text(self, server_id: int, xp_rate: int, msg_cooldown: int, msg_rankthr: int, msg_xpfactor: float, msg_xpmin: int) -> int:
