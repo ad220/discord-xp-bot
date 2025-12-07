@@ -20,7 +20,7 @@ class Database:
     def init(self) -> None: 
         self.cur.execute('CREATE TABLE IF NOT EXISTS servers (id INTEGER PRIMARY KEY, name TEXT, xprate_msg INTEGER DEFAULT 1, xprate_voice INTEGER DEFAULT 1, mod_role INTEGER DEFAULT 0, msg_cooldown INTEGER DEFAULT 0, msg_rankthreshold INTEGER DEFAULT -1, msg_xpfactor REAL DEFAULT 1, msg_xpmin INTEGER DEFAULT 1)')
         self.cur.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, discord_id INTEGER, server_id INTEGER, xp INTEGER DEFAULT 0, msg_count INTEGER DEFAULT 0, voice_uptime INTEGER DEFAULT 0, lastmsg_time INTEGER DEFAULT 0, lastmsg_xp INTEGER DEFAULT 0, currency INTEGER DEFAULT 0, lastcur_date INTEGER DEFAULT 0)') 
-        self.cur.execute('CREATE TABLE IF NOT EXISTS roles (id INTEGER PRIMARY KEY, xp_threshold INTEGER, server_id INTEGER)')
+        self.cur.execute('CREATE TABLE IF NOT EXISTS roles (id INTEGER PRIMARY KEY, xp_threshold INTEGER, server_id INTEGER, cur_reward INTEGER DEFAULT 0)')
         self.cur.execute('CREATE TABLE IF NOT EXISTS channels (id INTEGER PRIMARY KEY, type INTEGER, server_id INTEGER)')
         self.con.commit()
         
@@ -46,6 +46,14 @@ class Database:
             self.cur.execute('ALTER TABLE users ADD COLUMN currency INTEGER DEFAULT 0')
             self.cur.execute('ALTER TABLE users ADD COLUMN lastcur_date INTEGER DEFAULT 0')
         elif nb_columns != 11:
+            self.con.close()
+            raise Exception('Database schema is unknown')
+        
+        self.cur.execute('PRAGMA table_info(roles)')
+        nb_columns = len(self.cur.fetchall())
+        if nb_columns == 3:
+            self.cur.execute('ALTER TABLE roles ADD COLUMN cur_reward INTEGER DEFAULT 0')
+        elif nb_columns != 4:
             self.con.close()
             raise Exception('Database schema is unknown')
 
@@ -82,14 +90,14 @@ class Database:
         self.con.commit()
 
 
-    def set_role(self, server_id: int, role_id: int, xp_threshold: int) -> None:
+    def set_role(self, role: Role) -> None:
         # check if role already exists
-        self.cur.execute('SELECT * FROM roles WHERE id = ?', (role_id,))
+        self.cur.execute('SELECT * FROM roles WHERE id = ?', (role.id,))
         if self.cur.fetchone():
             # update xp_threshold value
-            self.cur.execute('UPDATE roles SET xp_threshold = ? WHERE id = ?', (xp_threshold, role_id))
+            self.cur.execute('UPDATE roles SET (xp_threshold, cur_reward) = (?, ?) WHERE id = ?', (role.xp_threshold, role.cur_reward, role.id))
         else:
-            self.cur.execute('INSERT INTO roles (id, xp_threshold, server_id) VALUES (?, ?, ?)', (role_id, xp_threshold, server_id))
+            self.cur.execute('INSERT INTO roles (id, xp_threshold, server_id, cur_reward) VALUES (?, ?, ?, ?)', role.to_db())
         self.con.commit()
 
 
@@ -112,8 +120,8 @@ class Database:
         self.cur.execute('SELECT * FROM servers WHERE id = ?', (server_id,))
         params = self.cur.fetchone()
 
-        self.cur.execute('SELECT id, xp_threshold FROM roles WHERE server_id = ? ORDER BY xp_threshold ASC', (server_id,))
-        roles = [Role(*params) for params in self.cur.fetchall()]
+        self.cur.execute('SELECT * FROM roles WHERE server_id = ? ORDER BY xp_threshold ASC', (server_id,))
+        roles = [Role(*r) for r in self.cur.fetchall()]
 
         channels = {}
         self.cur.execute('SELECT id FROM channels WHERE server_id = ? AND type = ?', (server_id, ChannelType.text.value))

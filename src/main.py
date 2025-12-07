@@ -13,6 +13,7 @@ token = os.environ.get('DISCORD_TOKEN')
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+intents.presences = True
 
 bot = discord.Bot(intents=intents)
 db = data.Database()
@@ -22,6 +23,13 @@ cached = data.Cache()
 # ================================
 # Functions
 # ================================
+
+def get_user_rank(member: discord.Member, server: data.Server) -> data.Role|None:
+    member_roles = [role.id for role in member.roles]
+    for role in server.roles:
+        if role.id in member_roles:
+            return role
+    return None
 
 async def update_role(member: discord.Member, server: data.Server, xp: int):
     member_roles = [role.id for role in member.roles]    
@@ -34,7 +42,7 @@ async def update_role(member: discord.Member, server: data.Server, xp: int):
         await member.add_roles(discord.Object(server.roles[n_role-1].id))
 
 async def is_mod(ctx: commands.Context):
-    mod_role = cached.get_server(ctx.guild.id).config.mod_role
+    mod_role = cached.get_server(ctx.guild.id).mod_role
     if mod_role in [role.id for role in ctx.author.roles]:
         return True
     await ctx.respond(f"You must be <{mod_role}> to use this command")
@@ -70,9 +78,12 @@ def is_channel_visible(ctx: commands.context, channel_id: int):
 
 def check_currency(user: data.User, member: discord.Member, cfg: data.Server):
     date = datetime.date.fromtimestamp(time.time()).toordinal()
+    print(member.status)
     if (date - user.lastcur_date > 0):
-        user.lastcur_date = date
-        # user.currency += 
+        rank = get_user_rank(member, cfg)
+        if rank and not member.status in [discord.Status.offline, discord.Status.invisible, discord.Status.idle]:
+            user.lastcur_date = date
+            user.currency += rank.cur_reward
 
 def on_exit():
     server: data.Server
@@ -81,7 +92,7 @@ def on_exit():
         for voice_update in server.voice_updates.values():
             if voice_update.is_connected:
                 uptime = time.time() // 60 - voice_update.update_time // 60
-                db.add_user_xp(server.id, voice_update.user_id, server.config.rate_voice * uptime)
+                db.add_user_xp(server.id, voice_update.user_id, server.rate_voice * uptime)
                 db.add_user_voice_uptime(server.id, voice_update.user_id, uptime)
 
 
@@ -127,19 +138,19 @@ async def on_guild_remove(guild: discord.Guild):
 @bot.event
 async def on_member_join(member):
     db.add_user(member.guild.id, member.id, member.name)
-    server = cached.get_server(member.guild.id).config
+    server = cached.get_server(member.guild.id)
     await update_role(member, server, 0)
 
 @bot.event
 async def on_message(message: discord.Message):
     if message.author.bot:
         return
-    server = cached.get_server(message.guild.id).config
+    server = cached.get_server(message.guild.id)
     if message.channel.id in server.channels['text']:
         user = db.get_user(message.guild.id, message.author.id)
         user.msg_count += 1
         
-        await check_currency(user, message.author, server)
+        check_currency(user, message.author, server)
 
         newmsg_time = time.time()
         if newmsg_time - user.lastmsg_time >= server.msg_cooldown:
@@ -153,10 +164,25 @@ async def on_message(message: discord.Message):
                 new_xp = max(int(user.lastmsg_xp * server.msg_xpfactor), server.msg_xpmin)
                 user.xp += new_xp
                 user.lastmsg_xp = new_xp
-            db.update_user(message.guild.id, message.author.id, msg_count=user.msg_count, xp=user.xp, lastmsg_time=newmsg_time, lastmsg_xp=user.lastmsg_xp)
+            db.update_user(
+                message.guild.id,
+                message.author.id,
+                msg_count       = user.msg_count,
+                xp              = user.xp,
+                lastmsg_time    = newmsg_time,
+                lastmsg_xp      = user.lastmsg_xp,
+                currency        = user.currency,
+                lastcur_date    = user.lastcur_date
+            )
             await update_role(message.author, server, user.xp)
         else:
-            db.update_user(message.guild.id, message.author.id, msg_count=user.msg_count)
+            db.update_user(
+                message.guild.id,
+                message.author.id,
+                msg_count       = user.msg_count,
+                currency        = user.currency,
+                lastcur_date    = user.lastcur_date
+            )
         
 
 @bot.event
@@ -170,9 +196,9 @@ async def on_voice_state_update(member: discord.Member,
         last_voice_update = server.get_voice_update(member.id)
         if last_voice_update and last_voice_update.is_connected:
             uptime = last_voice_update.uptime(data.VoiceUpdate(member, after))
-            xp = db.add_user_xp(member.guild.id, member.id, server.config.rate_voice * uptime)
+            xp = db.add_user_xp(member.guild.id, member.id, server.rate_voice * uptime)
             db.add_user_voice_uptime(member.guild.id, member.id, uptime)
-            await update_role(member, server.config, xp)
+            await update_role(member, server, xp)
             server.add_voice_update(member, after)
     # If user connected to voice channel, create a new voice update
     elif before.channel is None and after.channel is not None:
@@ -214,7 +240,7 @@ async def stats(ctx: commands.Context):
 
 @bot.command(description="Shows the roles and the XP required to get them")
 async def info(ctx: commands.Context):
-    server = cached.get_server(ctx.guild.id).config
+    server = cached.get_server(ctx.guild.id)
     embed = discord.Embed(
         title="Roles",
         color=0x82c778,
@@ -238,7 +264,7 @@ async def user_xp(ctx: commands.Context, member: discord.Member, xp: int):
 async def refresh_roles(ctx: commands.Context):
     if await is_mod(ctx):
         await ctx.send('Refreshing roles...')
-        server = cached.get_server(ctx.guild.id).config
+        server = cached.get_server(ctx.guild.id)
         users = db.get_users(ctx.guild.id)
         for u in users:
             member = ctx.guild.get_member(u.discord_id)
@@ -251,7 +277,7 @@ config = bot.create_group('config', "Manage bot configuration for this server")
 @config.command(description="Show the full bot configuration for this server")
 async def show(ctx: commands.Context):
     if await is_mod(ctx):
-        server = cached.get_server(ctx.guild.id).config
+        server = cached.get_server(ctx.guild.id)
         embed = discord.Embed(
             title="XP Bot configuration",
             color=0x82c778,
@@ -287,7 +313,7 @@ async def rm(ctx: commands.Context, channel: discord.TextChannel | discord.Voice
 @channel.command(description="Show the list of channels to track")
 async def show(ctx: commands.Context):
     if await is_mod(ctx):
-        server = cached.get_server(ctx.guild.id).config
+        server = cached.get_server(ctx.guild.id)
         embed = discord.Embed(
             title="Channels",
             color=0x82c778,
@@ -306,9 +332,10 @@ async def show(ctx: commands.Context):
 role = config.create_subgroup('role', "Manage automatic roles")
 
 @role.command(description="Add a role to the list of automatic roles")
-async def add(ctx: commands.Context, role: discord.Role, xp_threshold: int):
+async def add(ctx: commands.Context, role: discord.Role, xp_threshold: int, currency_reward):
     if await is_mod(ctx):
-        db.set_role(ctx.guild.id, role.id, xp_threshold)
+        role_db = data.Role(role.id, xp_threshold, ctx.guild.id, currency_reward)
+        db.set_role(role_db)
         cached.update_server_config(db.get_server(ctx.guild.id))
         await ctx.respond('Done')
 
@@ -344,7 +371,7 @@ async def voice(ctx: commands.Context, xp_per_minute: int):
 @rate.command(description="Show the XP rate for text and voice channels")
 async def show(ctx: commands.Context):
     if await is_mod(ctx):
-        server = cached.get_server(ctx.guild.id).config
+        server = cached.get_server(ctx.guild.id)
         embed = discord.Embed(
             title="XP rate",
             color=0x82c778,
