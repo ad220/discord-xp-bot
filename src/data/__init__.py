@@ -1,3 +1,4 @@
+from .history import *
 from .role import *
 from .server import *
 from .user import *
