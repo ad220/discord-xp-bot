@@ -1,3 +1,4 @@
+import asyncio
 import os
 import time
 import datetime
@@ -18,6 +19,7 @@ intents.presences = True
 bot = discord.Bot(intents=intents)
 db = data.Database()
 cached = data.Cache()
+scheduled: asyncio.TimerHandle
 
 
 # ================================
@@ -86,6 +88,8 @@ def check_currency(user: data.User, member: discord.Member, cfg: data.Server):
             user.currency += rank.cur_reward
 
 def on_exit():
+    scheduled.cancel()
+
     server: data.Server
     for server in cached.data.values():
         voice_update: data.VoiceUpdate
@@ -94,6 +98,33 @@ def on_exit():
                 uptime = time.time() // 60 - voice_update.update_time // 60
                 db.add_user_xp(server.id, voice_update.user_id, server.rate_voice * uptime)
                 db.add_user_voice_uptime(server.id, voice_update.user_id, uptime)
+
+
+async def schedule_daily_tasks():
+    global scheduled
+    loop = asyncio.get_running_loop()
+    
+    now = datetime.datetime.now()
+    target_time = datetime.time(5, 0)  # 5:00 AM
+    target_datetime = datetime.datetime.combine(now.date(), target_time)
+    
+    # If it's already past 5 AM today, schedule for tomorrow
+    if now.time() > target_time:
+        target_datetime += datetime.timedelta(days=1)
+    
+    scheduled = loop.call_at(target_datetime.timestamp(), daily_tasks)
+
+
+async def daily_tasks():
+    # History entry
+    server_list = db.get_servers()
+    for server_id in server_list:
+        users = db.get_users(server_id)
+        db.add_history_records(server_id, users)
+
+    data.backup_database()
+
+    await schedule_daily_tasks()
 
 
 # ================================
@@ -392,5 +423,6 @@ async def mod_role(ctx: commands.Context, role: discord.Role):
 
 
 if __name__ == '__main__':
+    asyncio.run(schedule_daily_tasks())
     bot.run(token)
     on_exit()
