@@ -12,8 +12,8 @@ def backup_database():
     current_date = datetime.datetime.now().strftime("%y-%m-%d")
 
     # Define the source and destination paths
-    source_path = os.path.join(os.path.dirname(__file__), '..', 'data.db')
-    destination_path = os.path.join(os.path.dirname(__file__), f'data_abu_{current_date}.db')
+    source_path = os.path.join("data/data.db")
+    destination_path = os.path.join(f"data/backup/data_abu_{current_date}.db")
 
     # Check if the source file exists
     if not os.path.exists(source_path):

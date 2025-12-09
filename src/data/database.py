@@ -25,7 +25,7 @@ class Database:
         self.cur.execute('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, discord_id INTEGER, server_id INTEGER, xp INTEGER DEFAULT 0, msg_count INTEGER DEFAULT 0, voice_uptime INTEGER DEFAULT 0, lastmsg_time INTEGER DEFAULT 0, lastmsg_xp INTEGER DEFAULT 0, currency INTEGER DEFAULT 0, lastcur_date INTEGER DEFAULT 0)') 
         self.cur.execute('CREATE TABLE IF NOT EXISTS roles (id INTEGER PRIMARY KEY, xp_threshold INTEGER, server_id INTEGER, cur_reward INTEGER DEFAULT 0)')
         self.cur.execute('CREATE TABLE IF NOT EXISTS channels (id INTEGER PRIMARY KEY, type INTEGER, server_id INTEGER)')
-        self.cur.execute('CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY, user_id INTEGER, server_id INTEGER, data INTEGER, xp INTEGER, msg INTEGER, voice_uptime INTEGER, currency INTEGER)')
+        self.cur.execute('CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY, user_id INTEGER, server_id INTEGER, date INTEGER, xp INTEGER, msg INTEGER, voice_uptime INTEGER, currency INTEGER)')
         self.con.commit()
         
         self.cur.execute('PRAGMA table_info(servers)')
