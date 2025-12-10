@@ -253,5 +253,5 @@ class Database:
     def add_history_records(self, server_id: int, users: list[User]) -> None:
         date = datetime.date.fromtimestamp(time.time()).toordinal()
         for u in users:
-            self.cur.execute('INSERT INTO history (user_id, server_id, date, xp, msg, voice_uptime, currency) VALUES (?, ?, ?, ?, ?, ?)', (u.discord_id, server_id, date, u.xp, u.msg_count, u.voice_uptime, u.currency))
+            self.cur.execute('INSERT INTO history (user_id, server_id, date, xp, msg, voice_uptime, currency) VALUES (?, ?, ?, ?, ?, ?, ?)', (u.discord_id, server_id, date, u.xp, u.msg_count, u.voice_uptime, u.currency))
         self.con.commit()

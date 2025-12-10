@@ -121,7 +121,8 @@ async def on_ready():
             for user_id in voice_states:
                 member = bot.get_guild(server).get_member(user_id)
                 cached.get_server(server).add_voice_update(member, voice_states[user_id])
-        
+    
+    daily_tasks.start()
     print(f'We have logged in as {bot.user}')
 
 @bot.event
@@ -413,6 +414,5 @@ async def before_backup():
 
 
 if __name__ == '__main__':
-    data.backup_database()
     bot.run(token)
     on_exit()
