@@ -1,4 +1,4 @@
-from config import *
+from .config import *
 
 channel = config.create_subgroup('channel', "Manage channels")
 

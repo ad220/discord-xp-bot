@@ -1,6 +1,6 @@
-import config
-import config_channels
-import config_rates
-import config_roles
-import mod_commands
-import user_commands
+from .config import *
+from .config_channels import *
+from .config_rates import *
+from .config_roles import *
+from .mod_commands import *
+from .user_commands import *

@@ -1,4 +1,4 @@
-from config import *
+from .config import *
 
 rate = config.create_subgroup('rate', "Manage XP rate")
 

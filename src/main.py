@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 
 from globals import *
 import commands
-import data
 import events
 
 def on_exit():

@@ -1,5 +1,5 @@
-from config import *
-import user_commands
+from .config import *
+from .user_commands import info
 
 role = config.create_subgroup('role', "Manage automatic roles")
 
@@ -21,4 +21,4 @@ async def rm(ctx: commands.Context, role: discord.Role):
 @role.command(description="Show the list of automatic roles")
 async def show(ctx: commands.Context):
     if await is_mod(ctx):
-        await user_commands.info(ctx)
+        await info(ctx)
