@@ -5,7 +5,6 @@ import shutil
 import datetime
 import sys
 
-print(os.path.dirname(__file__))
 
 def backup_database():
     # Get the current date
