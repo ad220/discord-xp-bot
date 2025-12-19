@@ -25,9 +25,10 @@ async def stats(ctx: commands.Context):
         title=f"{user.username}'s stats",
         color=0x82c778,
     )
-    embed.add_field(name="XP", value=f"{user.xp} XP")
-    embed.add_field(name="Texts", value=f"{user.msg_count} msg")
-    embed.add_field(name="Vocal", value=f"{user.voice_uptime//60}h{user.voice_uptime%60:02d}")
+    embed.add_field(name="XP", value=f"{user.xp} XP", inline=False)
+    embed.add_field(name=":coin:", value=f"{user.currency}", inline=False)
+    embed.add_field(name="Texts", value=f"{user.msg_count} msg", inline=True)
+    embed.add_field(name="Vocal", value=f"{user.voice_uptime//60}h{user.voice_uptime%60:02d}", inline=True)
     await ctx.respond(embed=embed)
 
 @bot.command(description="Shows the roles and the XP required to get them")

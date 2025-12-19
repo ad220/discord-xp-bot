@@ -4,7 +4,7 @@ from .user_commands import info
 role = config.create_subgroup('role', "Manage automatic roles")
 
 @role.command(description="Add a role to the list of automatic roles")
-async def add(ctx: commands.Context, role: discord.Role, xp_threshold: int, currency_reward):
+async def add(ctx: commands.Context, role: discord.Role, xp_threshold: int, currency_reward: int):
     if await is_mod(ctx):
         role_db = data.Role(role.id, xp_threshold, ctx.guild.id, currency_reward)
         db.set_role(role_db)

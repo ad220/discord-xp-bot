@@ -102,11 +102,25 @@ async def on_voice_state_update(member: discord.Member,
     if before.channel is not None and after.channel is None:
         last_voice_update = server.get_voice_update(member.id)
         if last_voice_update and last_voice_update.is_connected:
+            user = db.get_user(server.id, member.id)
+
+            check_currency(user, member, server)
+
             uptime = last_voice_update.uptime(data.VoiceUpdate(member, after))
-            xp = db.add_user_xp(member.guild.id, member.id, server.rate_voice * uptime)
-            db.add_user_voice_uptime(member.guild.id, member.id, uptime)
-            await update_role(member, server, xp)
+            user.voice_uptime += uptime
+            user.xp += server.rate_voice * uptime
+
+            await update_role(member, server, user.xp)
+
             server.add_voice_update(member, after)
+            db.update_user(
+                server.id,
+                member.id,
+                xp=user.xp,
+                voice_uptime=user.voice_uptime,
+                currency=user.currency
+            )
+    
     # If user connected to voice channel, create a new voice update
     elif before.channel is None and after.channel is not None:
         server.add_voice_update(member, after)

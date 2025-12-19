@@ -38,14 +38,15 @@ def add_channel_fields(embed: discord.Embed, server: data.Server):
 
 def add_role_fields(embed: discord.Embed, server: data.Server):
     role_list = server.roles
-    role_column = []
-    xp_column = []
+    role_column, xp_column, cur_column = [], [], []
     for n, role in enumerate(role_list):
         role_column.append(f"`{n}.` <@&{role.id}>")
         xp_column.append(f"`{role.xp_threshold}`")
+        cur_column.append(f"`{role.cur_reward}`")
 
     embed.add_field(name="Role", value="\n".join(role_column), inline=True)
-    embed.add_field(name="XP required", value="\n".join(xp_column), inline=True)
+    embed.add_field(name="XP", value="\n".join(xp_column), inline=True)
+    embed.add_field(name=":coin:", value="\n".join(cur_column), inline=True)
 
 def add_xprate_fields(embed: discord.Embed, server: data.Server):
     embed.add_field(name="Text", value=f"`{server.rate_txt}`/msg", inline=True)
